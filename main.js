@@ -551,10 +551,13 @@ ACM.Game = (function () {
     document.getElementById("btn-inventory").onclick = openInventoryModal;
     document.getElementById("btn-leaderboard").onclick = openLeaderboardModal;
     document.getElementById("btn-save").onclick = async () => {
-      const res = await ACM.CloudSync.saveToCloud(state);
-      toast(res.mode === "local" ? "Saved locally on this device." : "Progress synced to Class Leaderboard!", "good");
-    };
-
+  const res = await ACM.CloudSync.saveToCloud(state);
+  if (res.mode === "cloud") {
+    toast("Progress synced to Class Leaderboard!", "good");
+  } else {
+    toast(`Saved locally (${res.error || res.warning || "Supabase keys not set"}).`, "bad");
+  }
+};
     const interactBtn = document.getElementById("btn-interact");
     const hintEl = document.getElementById("station-hint");
     interactBtn.onclick = () => {
