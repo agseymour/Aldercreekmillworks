@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alder Creek Millworks — Production Tech 11 & 12</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app-shell">
+    <!-- Top HUD -->
+    <header id="top-hud">
+      <div class="hud-group">
+        <span class="badge badge-wood" id="hud-shop-name">Alder Creek Shop</span>
+        <span class="badge badge-act" id="hud-act">Act I: Sweeping Out the Sawdust</span>
+      </div>
+      <div class="hud-group">
+        <div class="hud-stat" title="Shop Reputation Rating">
+          <span class="stat-label">Rating</span>
+          <span class="stat-val" id="hud-stars">★ 1.0</span>
+        </div>
+        <div class="hud-stat" title="Available Business Cash">
+          <span class="stat-label">Cash</span>
+          <span class="stat-val cash-val" id="hud-cash">$120</span>
+        </div>
+        <div class="hud-stat" title="Sawdust Fire Hazard Level">
+          <span class="stat-label">Sawdust</span>
+          <span class="stat-val" id="hud-sawdust">0%</span>
+        </div>
+        <div class="hud-stat" title="Active Customer Commission">
+          <span class="stat-label">Active Job</span>
+          <span class="stat-val" id="hud-job">None</span>
+        </div>
+      </div>
+      <div class="hud-group hud-actions">
+        <button class="btn-wood btn-sm" id="btn-story">Story & Jobs</button>
+        <button class="btn-wood btn-sm" id="btn-inventory">Shop Inventory</button>
+        <button class="btn-wood btn-sm" id="btn-leaderboard">Leaderboard</button>
+        <button class="btn-brass btn-sm" id="btn-save">Save</button>
+      </div>
+    </header>
+
+    <!-- Main Game Viewport -->
+    <main id="viewport-wrap">
+      <canvas id="game-canvas" width="840" height="500"></canvas>
+
+      <!-- Bottom Interaction Prompt -->
+      <div id="interaction-banner">
+        <span id="station-hint">Walk with WASD / Arrow Keys or click any station in the workshop.</span>
+        <button class="btn-brass" id="btn-interact" disabled>Open Station [E]</button>
+      </div>
+    </main>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container"></div>
+
+    <!-- Reusable Modal Dialog -->
+    <div id="modal-overlay" class="hidden">
+      <div id="modal-box" class="timber-panel">
+        <div class="modal-header">
+          <h2 id="modal-title">Station</h2>
+          <button class="btn-close" id="modal-close" aria-label="Close">✕</button>
+        </div>
+        <div id="modal-body"></div>
+      </div>
+    </div>
+
+    <!-- Start / Character Creator & Class Login Modal -->
+    <div id="creator-modal">
+      <div class="timber-panel creator-panel">
+        <div class="creator-header">
+          <h1>Alder Creek Millworks</h1>
+          <p class="subtitle">Nova Scotia Production Technology 11 & 12 Simulation</p>
+        </div>
+
+        <div class="creator-grid">
+          <div class="creator-preview-col">
+            <canvas id="preview-canvas" width="140" height="160"></canvas>
+            <p class="hint-text">Customize your woodworker</p>
+          </div>
+
+          <div class="creator-form-col">
+            <div class="form-row">
+              <label for="input-class-code">Class Code (from your teacher)</label>
+              <input type="text" id="input-class-code" placeholder="e.g., PRODTECH11A" maxlength="20" />
+            </div>
+            <div class="form-row">
+              <label for="input-shop-name">Your Name / Workshop Name</label>
+              <input type="text" id="input-shop-name" placeholder="e.g., Bluenose Joinery" maxlength="24" />
+            </div>
+            <div class="form-row">
+              <label for="input-pin">4-Digit Save PIN (protects your save)</label>
+              <input type="password" id="input-pin" placeholder="1234" maxlength="4" />
+            </div>
+
+            <div class="appearance-controls">
+              <div class="pick-group">
+                <span>Skin</span>
+                <select id="pick-skin">
+                  <option value="#f3c69f">Warm Light</option>
+                  <option value="#e0a97c">Tan</option>
+                  <option value="#b97a56">Medium Brown</option>
+                  <option value="#7a4b32">Deep Brown</option>
+                  <option value="#f7d7c4">Fair</option>
+                </select>
+              </div>
+              <div class="pick-group">
+                <span>Hair</span>
+                <select id="pick-hair">
+                  <option value="#3b2618">Dark Brown</option>
+                  <option value="#1c1c1e">Black</option>
+                  <option value="#8c4a27">Auburn</option>
+                  <option value="#d4a74a">Blonde</option>
+                  <option value="#6e737b">Slate</option>
+                </select>
+              </div>
+              <div class="pick-group">
+                <span>Flannel</span>
+                <select id="pick-shirt">
+                  <option value="#a83232">Crimson Plaid</option>
+                  <option value="#2e5e4e">Forest Green</option>
+                  <option value="#2b4c7e">Harbor Blue</option>
+                  <option value="#b5651d">Amber Ochre</option>
+                </select>
+              </div>
+              <div class="pick-group">
+                <span>Apron</span>
+                <select id="pick-apron">
+                  <option value="#6b4423">Saddle Leather</option>
+                  <option value="#3d4852">Waxed Canvas</option>
+                  <option value="#8a6d3b">Tan Duck</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="creator-buttons">
+              <button class="btn-brass btn-lg" id="btn-start-new">Start / Resume Workshop</button>
+            </div>
+            <p id="login-status" class="status-note"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modular Scripts in Dependency Order -->
+  <script src="data-tools.js"></script>
+  <script src="data-lumber.js"></script>
+  <script src="data-projects.js"></script>
+  <script src="data-questions.js"></script>
+  <script src="art-sprites.js"></script>
+  <script src="art-diagrams.js"></script>
+  <script src="minigames.js"></script>
+  <script src="world.js"></script>
+  <script src="cloud-sync.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
