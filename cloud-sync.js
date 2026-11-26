@@ -13,15 +13,16 @@ ACM.CloudSync = (function () {
     return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
   }
 
-  function headers(extra = {}) {
-    return Object.assign(
-      {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        "Content-Type": "application/json"
-      },
-      extra
-    );
+function headers(extra = {}) {
+    const base = {
+      apikey: SUPABASE_ANON_KEY,
+      "Content-Type": "application/json"
+    };
+    // Only include Authorization Bearer if using a legacy JWT key ("eyJ...")
+    if (SUPABASE_ANON_KEY.startsWith("eyJ")) {
+      base.Authorization = `Bearer ${SUPABASE_ANON_KEY}`;
+    }
+    return Object.assign(base, extra);
   }
 
   async function fetchWithTimeout(url, options = {}, timeoutMs = 4000) {
