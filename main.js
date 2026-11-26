@@ -56,6 +56,7 @@ ACM.Game = (function () {
 
   function toast(msg, type = "") {
     const container = document.getElementById("toast-container");
+    if (!container) return;
     const el = document.createElement("div");
     el.className = `toast ${type}`;
     el.textContent = msg;
@@ -65,7 +66,8 @@ ACM.Game = (function () {
 
   function updateHUD() {
     document.getElementById("hud-shop-name").textContent = state.shopName;
-    const actObj = ACM.STORY_ACTS.find((a) => a.act === state.currentAct) || ACM.STORY_ACTS[0];
+    const acts = ACM.STORY_ACTS || [];
+    const actObj = acts.find((a) => a.act === state.currentAct) || acts[0] || { title: "Act I" };
     document.getElementById("hud-act").textContent = actObj.title;
     document.getElementById("hud-stars").textContent = `★ ${state.stars.toFixed(2)}`;
     document.getElementById("hud-cash").textContent = `$${Math.round(state.cash)}`;
@@ -79,7 +81,7 @@ ACM.Game = (function () {
   }
 
   function getActiveProject() {
-    return ACM.PROJECTS.find((p) => p.id === state.activeProjectId) || null;
+    return (ACM.PROJECTS || []).find((p) => p.id === state.activeProjectId) || null;
   }
 
   function resetJobProgress() {
@@ -316,12 +318,10 @@ ACM.Game = (function () {
       state.completedProjectIds.push(job.id);
     }
 
-    // Advance Act if Anchor Commission completed
     if (job.isAnchor && state.currentAct < 5) {
       state.currentAct++;
     }
 
-    // Update Legacy Title
     if (state.stars >= 4.8 && state.safetyIncidents === 0) {
       state.legacyTitle = "The Master Artisan";
     } else if (state.cash >= 1500) {
@@ -440,57 +440,110 @@ ACM.Game = (function () {
     else if (stationId === "town_board") openTownBoard();
   }
 
+  function checkMissingModules() {
+    const required = [
+      ["TOOLS", "data-tools.js"],
+      ["LUMBER", "data-lumber.js"],
+      ["PROJECTS", "data-projects.js"],
+      ["QUESTIONS", "data-questions.js"],
+      ["ArtSprites", "art-sprites.js"],
+      ["ArtDiagrams", "art-diagrams.js"],
+      ["Minigames", "minigames.js"],
+      ["World", "world.js"],
+      ["CloudSync", "cloud-sync.js"]
+    ];
+    return required.filter(([key]) => !ACM[key]).map(([, file]) => file);
+  }
+
   function initCharacterCreator() {
-    const previewCanvas = document.getElementById("preview-canvas");
-    const pCtx = previewCanvas.getContext("2d");
+    const statusEl = document.getElementById("login-status");
+    const startBtn = document.getElementById("btn-start-new");
+    const missing = checkMissingModules();
 
-    const drawPreview = () => {
-      state.appearance.skin = document.getElementById("pick-skin").value;
-      state.appearance.hair = document.getElementById("pick-hair").value;
-      state.appearance.shirt = document.getElementById("pick-shirt").value;
-      state.appearance.apron = document.getElementById("pick-apron").value;
+    if (missing.length > 0) {
+      statusEl.style.color = "#b91c1c";
+      statusEl.textContent = `Missing game file(s): ${missing.join(", ")}. Check filenames in GitHub.`;
+      return;
+    }
 
-      pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-      pCtx.fillStyle = "#7b5233";
-      pCtx.fillRect(0, 115, 140, 45);
-      ACM.ArtSprites.drawCharacter(pCtx, 70, 95, state.appearance, 3.0, 0, "down", { safety_glasses: true });
-    };
-
-    ["pick-skin", "pick-hair", "pick-shirt", "pick-apron"].forEach((id) => {
-      document.getElementById(id).addEventListener("change", drawPreview);
-    });
-    drawPreview();
-
-    document.getElementById("btn-start-new").onclick = async () => {
+    // Bind Start button FIRST so nothing can block it
+    startBtn.onclick = async () => {
+      startBtn.disabled = true;
       const classCode = document.getElementById("input-class-code").value.trim().toUpperCase() || "PRODTECH11";
       const shopName = document.getElementById("input-shop-name").value.trim() || "Alder Creek Shop";
       const pin = document.getElementById("input-pin").value.trim() || "0000";
-      const statusEl = document.getElementById("login-status");
 
-      statusEl.textContent = "Checking for existing workshop save...";
-      const existing = await ACM.CloudSync.loadFromCloud(classCode, shopName, pin);
+      statusEl.style.color = "#3b2416";
+      statusEl.textContent = "Opening workshop...";
 
-      if (existing) {
-        Object.assign(state, existing);
-        toast(`Welcome back to ${state.shopName}!`, "good");
-      } else {
+      try {
+        if (ACM.CloudSync && ACM.CloudSync.loadFromCloud) {
+          const result = await ACM.CloudSync.loadFromCloud(classCode, shopName, pin);
+          if (result && result.error) {
+            statusEl.style.color = "#b91c1c";
+            statusEl.textContent = result.error;
+            startBtn.disabled = false;
+            return;
+          }
+          if (result && result.state) {
+            Object.assign(state, result.state);
+            toast(`Welcome back to ${state.shopName}!`, "good");
+          } else {
+            state.classCode = classCode;
+            state.shopName = shopName;
+            state.pin = pin;
+            const saveRes = await ACM.CloudSync.saveToCloud(state);
+            if (saveRes && saveRes.error) {
+              statusEl.style.color = "#b91c1c";
+              statusEl.textContent = saveRes.error;
+              startBtn.disabled = false;
+              return;
+            }
+            toast(`Opened ${state.shopName}! Walk to a station to begin.`, "good");
+          }
+        }
+      } catch (err) {
+        // Never trap the user on the start screen if cloud sync fails
         state.classCode = classCode;
         state.shopName = shopName;
         state.pin = pin;
-        await ACM.CloudSync.saveToCloud(state);
-        toast(`Opened ${state.shopName}! Walk to the Blueprint Desk or Town Board to begin.`, "good");
       }
 
       document.getElementById("creator-modal").classList.add("hidden");
       updateHUD();
+      startBtn.disabled = false;
     };
+
+    // Draw live character preview
+    const previewCanvas = document.getElementById("preview-canvas");
+    if (previewCanvas && ACM.ArtSprites) {
+      const pCtx = previewCanvas.getContext("2d");
+      const drawPreview = () => {
+        state.appearance.skin = document.getElementById("pick-skin").value;
+        state.appearance.hair = document.getElementById("pick-hair").value;
+        state.appearance.shirt = document.getElementById("pick-shirt").value;
+        state.appearance.apron = document.getElementById("pick-apron").value;
+
+        pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+        pCtx.fillStyle = "#7b5233";
+        pCtx.fillRect(0, 115, 140, 45);
+        ACM.ArtSprites.drawCharacter(pCtx, 70, 95, state.appearance, 3.0, 0, "down", { safety_glasses: true });
+      };
+
+      ["pick-skin", "pick-hair", "pick-shirt", "pick-apron"].forEach((id) => {
+        document.getElementById(id).addEventListener("change", drawPreview);
+      });
+      drawPreview();
+    }
   }
 
   function start() {
+    initCharacterCreator();
+
     const canvas = document.getElementById("game-canvas");
+    if (!canvas || !ACM.World) return;
     const ctx = canvas.getContext("2d");
 
-    initCharacterCreator();
     ACM.World.init(canvas, (sid) => handleStationInteract.call(ACM.Game, sid));
 
     document.getElementById("modal-close").onclick = closeModal;
@@ -499,7 +552,7 @@ ACM.Game = (function () {
     document.getElementById("btn-leaderboard").onclick = openLeaderboardModal;
     document.getElementById("btn-save").onclick = async () => {
       const res = await ACM.CloudSync.saveToCloud(state);
-      toast(res.mode === "local" ? "Saved locally (connect Google Sheet URL for cloud sync)." : "Progress synced to Class Leaderboard!", "good");
+      toast(res.mode === "local" ? "Saved locally on this device." : "Progress synced to Class Leaderboard!", "good");
     };
 
     const interactBtn = document.getElementById("btn-interact");
@@ -531,7 +584,11 @@ ACM.Game = (function () {
     requestAnimationFrame(loop);
   }
 
-  window.addEventListener("DOMContentLoaded", start);
+  if (document.readyState === "loading") {
+    window.addEventListener("DOMContentLoaded", start);
+  } else {
+    start();
+  }
 
   return {
     state,
