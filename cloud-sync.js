@@ -2,9 +2,11 @@ window.ACM = window.ACM || {};
 
 ACM.CloudSync = (function () {
   // PASTE YOUR SUPABASE PROJECT URL & ANON PUBLIC KEY BELOW:
-  const SUPABASE_URL = "https://zifhqglitwbqfsomdndv.supabase.co"; // e.g., "https://abcdefghijklm.supabase.co"
-  const SUPABASE_ANON_KEY = "zifhqglitwbqfsomdndv"; // e.g., "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  const RAW_SUPABASE_URL = "https://zifhqglitwbqfsomdndv.supabase.co"; // e.g., "https://abcdefghijklm.supabase.co"
+  const RAW_SUPABASE_ANON_KEY = "zifhqglitwbqfsomdndv"; // e.g., "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 
+  const SUPABASE_URL = RAW_SUPABASE_URL.trim().replace(/\/+$/, "");
+  const SUPABASE_ANON_KEY = RAW_SUPABASE_ANON_KEY.trim();
   const LOCAL_PREFIX = "acm_save_v1_";
 
   function isConfigured() {
@@ -20,6 +22,16 @@ ACM.CloudSync = (function () {
       },
       extra
     );
+  }
+
+  async function fetchWithTimeout(url, options = {}, timeoutMs = 4000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   function saveLocal(state) {
@@ -50,20 +62,15 @@ ACM.CloudSync = (function () {
     const pin = String(state.pin || "0000").trim();
 
     try {
-      // 1. Check if this Shop Name already exists with a different PIN
       const checkUrl = `${SUPABASE_URL}/rest/v1/acm_saves?class_code=eq.${encodeURIComponent(classCode)}&shop_name=eq.${encodeURIComponent(shopName)}&select=pin`;
-      const checkRes = await fetch(checkUrl, { headers: headers() });
+      const checkRes = await fetchWithTimeout(checkUrl, { headers: headers() });
       if (checkRes.ok) {
         const existingRows = await checkRes.json();
         if (existingRows.length > 0 && existingRows[0].pin && existingRows[0].pin !== pin) {
-          if (ACM.Game && ACM.Game.toast) {
-            ACM.Game.toast("That Workshop Name is already taken with a different PIN!", "bad");
-          }
-          return { ok: false, error: "PIN mismatch" };
+          return { ok: false, error: "That Workshop Name is already taken with a different 4-digit PIN." };
         }
       }
 
-      // 2. Upsert student save & leaderboard stats
       const row = {
         class_code: classCode,
         shop_name: shopName,
@@ -77,15 +84,18 @@ ACM.CloudSync = (function () {
       };
 
       const upsertUrl = `${SUPABASE_URL}/rest/v1/acm_saves?on_conflict=class_code,shop_name`;
-      const res = await fetch(upsertUrl, {
+      const res = await fetchWithTimeout(upsertUrl, {
         method: "POST",
         headers: headers({ Prefer: "resolution=merge-duplicates" }),
         body: JSON.stringify(row)
       });
 
-      return { ok: res.ok, mode: "cloud" };
+      if (!res.ok) {
+        return { ok: false, mode: "local", error: `Cloud sync returned HTTP ${res.status}` };
+      }
+      return { ok: true, mode: "cloud" };
     } catch (err) {
-      return { ok: false, mode: "offline", error: err.message };
+      return { ok: true, mode: "local", warning: err.message };
     }
   }
 
@@ -96,33 +106,30 @@ ACM.CloudSync = (function () {
     const local = loadLocal(cleanCode, cleanName);
 
     if (!isConfigured()) {
-      if (local && (!local.pin || local.pin === cleanPin)) return local;
-      return null;
+      if (local && (!local.pin || local.pin === cleanPin)) return { state: local };
+      return { state: null };
     }
 
     try {
       const url = `${SUPABASE_URL}/rest/v1/acm_saves?class_code=eq.${encodeURIComponent(cleanCode)}&shop_name=eq.${encodeURIComponent(cleanName)}&select=pin,save_json`;
-      const res = await fetch(url, { headers: headers() });
+      const res = await fetchWithTimeout(url, { headers: headers() });
       if (res.ok) {
         const rows = await res.json();
         if (rows.length > 0) {
           if (rows[0].pin && rows[0].pin !== cleanPin) {
-            if (ACM.Game && ACM.Game.toast) {
-              ACM.Game.toast("Incorrect 4-digit PIN for that Workshop Name.", "bad");
-            }
-            return null;
+            return { error: "Incorrect 4-digit PIN for that existing Workshop Name." };
           }
           const parsed = JSON.parse(rows[0].save_json);
           saveLocal(parsed);
-          return parsed;
+          return { state: parsed };
         }
       }
     } catch (err) {
-      // Fallback to local cache if offline
+      // Fall back to local cache if network times out
     }
 
-    if (local && (!local.pin || local.pin === cleanPin)) return local;
-    return null;
+    if (local && (!local.pin || local.pin === cleanPin)) return { state: local };
+    return { state: null };
   }
 
   async function fetchLeaderboard(classCode) {
@@ -153,7 +160,7 @@ ACM.CloudSync = (function () {
     try {
       const filter = cleanCode ? `class_code=eq.${encodeURIComponent(cleanCode)}&` : "";
       const url = `${SUPABASE_URL}/rest/v1/acm_saves?${filter}select=shop_name,stars,cash,act,legacy_title&order=stars.desc,cash.desc`;
-      const res = await fetch(url, { headers: headers() });
+      const res = await fetchWithTimeout(url, { headers: headers() });
       if (!res.ok) return [];
       const data = await res.json();
       return data.map((r) => ({
