@@ -2,8 +2,8 @@ window.ACM = window.ACM || {};
 
 ACM.CloudSync = (function () {
   // PASTE YOUR SUPABASE PROJECT URL & ANON PUBLIC KEY BELOW:
-  const SUPABASE_URL = ""; // e.g., "https://abcdefghijklm.supabase.co"
-  const SUPABASE_ANON_KEY = ""; // e.g., "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  const SUPABASE_URL = "https://zifhqglitwbqfsomdndv.supabase.co"; // e.g., "https://abcdefghijklm.supabase.co"
+  const SUPABASE_ANON_KEY = "zifhqglitwbqfsomdndv"; // e.g., "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 
   const LOCAL_PREFIX = "acm_save_v1_";
 
