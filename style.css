@@ -65,7 +65,7 @@ body {
   padding: 4px 10px;
   border-radius: 5px;
   font-weight: bold;
-  font-size: 0.85rem;
+  font-size: 0.84rem;
 }
 
 .badge-wood {
@@ -74,10 +74,10 @@ body {
   color: #fff8e7;
 }
 
-.badge-act {
+.badge-season {
   background: #283f32;
-  border: 1px solid #6ba37c;
-  color: #d7f5df;
+  border: 1px solid #74b887;
+  color: #e2f8e9;
 }
 
 .hud-stat {
@@ -87,7 +87,7 @@ body {
   padding: 3px 8px;
   display: flex;
   flex-direction: column;
-  min-width: 68px;
+  min-width: 66px;
 }
 
 .stat-label {
@@ -98,7 +98,7 @@ body {
 }
 
 .stat-val {
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   font-weight: bold;
   color: #fff;
 }
@@ -226,7 +226,7 @@ button:disabled {
   box-shadow: 0 0 0 3px var(--brass), 0 16px 40px rgba(0, 0, 0, 0.75);
   border-radius: 10px;
   width: 100%;
-  max-width: 780px;
+  max-width: 800px;
   max-height: 88vh;
   display: flex;
   flex-direction: column;
@@ -262,10 +262,23 @@ button:disabled {
   line-height: 1.45;
 }
 
+.npc-banner {
+  background: #fff7e6;
+  border: 2px solid #d49b35;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* Cards & Grids inside Modals */
 .card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(225px, 1fr));
   gap: 10px;
   margin-top: 10px;
 }
