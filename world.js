@@ -70,6 +70,7 @@ ACM.World = (function () {
     y: 220,
     targetX: null,
     targetY: null,
+    pendingStationId: null,
     speed: 3.6,
     facing: "down",
     frame: 0,
@@ -80,9 +81,9 @@ ACM.World = (function () {
   const keys = {};
   const dpad = { up: false, down: false, left: false, right: false };
   let activeStation = null;
+  let interactCallback = null;
   let tick = 0;
 
-  // Ambient Rabbits
   const rabbits = [
     { x: 220, y: 720, vx: 0, vy: 0, hopZ: 0, hopV: 0, timer: 40 },
     { x: 430, y: 830, vx: 0, vy: 0, hopZ: 0, hopV: 0, timer: 90 },
@@ -90,7 +91,6 @@ ACM.World = (function () {
     { x: 1080, y: 790, vx: 0, vy: 0, hopZ: 0, hopV: 0, timer: 60 }
   ];
 
-  // Ambient Birds
   const birds = Array.from({ length: 5 }, (_, i) => ({
     x: 120 + i * 170,
     y: 50 + (i % 3) * 45,
@@ -98,7 +98,6 @@ ACM.World = (function () {
     wingPhase: i * 1.4
   }));
 
-  // Weather Particles
   const particles = Array.from({ length: 55 }, () => ({
     x: Math.random() * VIEW_W,
     y: Math.random() * VIEW_H,
@@ -135,6 +134,8 @@ ACM.World = (function () {
   }
 
   function init(canvas, onInteract) {
+    interactCallback = onInteract;
+
     window.addEventListener("blur", clearKeys);
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) clearKeys();
@@ -172,7 +173,6 @@ ACM.World = (function () {
       if (e.code) keys[e.code] = false;
     });
 
-    // Wire up On-Screen D-Pad buttons
     document.querySelectorAll(".dpad-btn").forEach((btn) => {
       const dir = btn.dataset.dir;
       const press = (ev) => {
@@ -181,6 +181,7 @@ ACM.World = (function () {
         focusGameCanvas(canvas);
         player.targetX = null;
         player.targetY = null;
+        player.pendingStationId = null;
         dpad[dir] = true;
         btn.classList.add("pressed");
       };
@@ -205,13 +206,20 @@ ACM.World = (function () {
       const worldX = (e.clientX - rect.left) * scaleX + camera.x;
       const worldY = (e.clientY - rect.top) * scaleY + camera.y;
 
-      const clickedStation = STATIONS.find((s) => Math.hypot(worldX - s.x, worldY - s.y) < 62);
-      if (clickedStation && Math.hypot(player.x - clickedStation.x, player.y - clickedStation.y) < 105) {
-        clearKeys();
-        onInteract(clickedStation.id);
+      const clickedStation = STATIONS.find((s) => Math.hypot(worldX - s.x, worldY - s.y) < 70);
+      if (clickedStation) {
+        if (Math.hypot(player.x - clickedStation.x, player.y - clickedStation.y) < 105) {
+          clearKeys();
+          onInteract(clickedStation.id);
+          return;
+        }
+        player.targetX = clickedStation.x;
+        player.targetY = clickedStation.y + 35;
+        player.pendingStationId = clickedStation.id;
         return;
       }
 
+      player.pendingStationId = null;
       player.targetX = Math.max(36, Math.min(WORLD_W - 36, worldX));
       player.targetY = Math.max(54, Math.min(WORLD_H - 36, worldY));
     });
@@ -306,17 +314,24 @@ ACM.World = (function () {
     if (dx !== 0 || dy !== 0) {
       player.targetX = null;
       player.targetY = null;
+      player.pendingStationId = null;
       const len = Math.hypot(dx, dy);
       dx = (dx / len) * player.speed;
       dy = (dy / len) * player.speed;
     } else if (player.targetX !== null && player.targetY !== null) {
       const fullDist = Math.hypot(player.targetX - player.x, player.targetY - player.y);
-      if (fullDist > 4) {
+      if (fullDist > 5) {
         dx = ((player.targetX - player.x) / fullDist) * player.speed;
         dy = ((player.targetY - player.y) / fullDist) * player.speed;
       } else {
+        const sidToOpen = player.pendingStationId;
         player.targetX = null;
         player.targetY = null;
+        player.pendingStationId = null;
+        if (sidToOpen && interactCallback) {
+          clearKeys();
+          interactCallback(sidToOpen);
+        }
       }
     }
 
@@ -372,7 +387,6 @@ ACM.World = (function () {
     ctx.translate(-camera.x, -camera.y);
     ACM.ArtSprites.drawWorld(ctx, state, worldData, tick);
 
-    // Draw click-to-walk destination ring on ground
     if (player.targetX !== null && player.targetY !== null) {
       const r = 8 + Math.sin(tick * 0.2) * 3;
       ctx.strokeStyle = "#fef08a";
@@ -383,8 +397,8 @@ ACM.World = (function () {
     }
 
     const gear = {
-      safety_glasses: state.ownedTools.includes("safety_glasses"),
-      ear_muffs: state.ownedTools.includes("ear_muffs")
+      safety_glasses: (state.ownedTools || []).includes("safety_glasses"),
+      ear_muffs: (state.ownedTools || []).includes("ear_muffs")
     };
 
     ACM.ArtSprites.drawCharacter(
