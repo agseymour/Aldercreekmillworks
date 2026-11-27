@@ -70,7 +70,7 @@ ACM.World = (function () {
     y: 220,
     targetX: null,
     targetY: null,
-    speed: 3.3,
+    speed: 3.6,
     facing: "down",
     frame: 0,
     stepTimer: 0
@@ -78,6 +78,7 @@ ACM.World = (function () {
 
   const camera = { x: 0, y: 0 };
   const keys = {};
+  const dpad = { up: false, down: false, left: false, right: false };
   let activeStation = null;
   let tick = 0;
 
@@ -106,20 +107,98 @@ ACM.World = (function () {
     kind: "leaf"
   }));
 
-  function init(canvas, onInteract) {
-    window.addEventListener("keydown", (e) => {
-      if (document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
-      keys[e.key.toLowerCase()] = true;
-      if ((e.key.toLowerCase() === "e" || e.key === "Enter") && activeStation) {
-        onInteract(activeStation.id);
-      }
+  function clearKeys() {
+    Object.keys(keys).forEach((k) => {
+      keys[k] = false;
     });
+    dpad.up = false;
+    dpad.down = false;
+    dpad.left = false;
+    dpad.right = false;
+    document.querySelectorAll(".dpad-btn").forEach((b) => b.classList.remove("pressed"));
+  }
+
+  function isModalOpen() {
+    const creator = document.getElementById("creator-modal");
+    const overlay = document.getElementById("modal-overlay");
+    return (
+      (creator && !creator.classList.contains("hidden")) ||
+      (overlay && !overlay.classList.contains("hidden"))
+    );
+  }
+
+  function focusGameCanvas(canvas) {
+    try {
+      window.focus();
+      if (canvas) canvas.focus({ preventScroll: true });
+    } catch (e) {}
+  }
+
+  function init(canvas, onInteract) {
+    window.addEventListener("blur", clearKeys);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) clearKeys();
+    });
+
+    window.addEventListener(
+      "keydown",
+      (e) => {
+        if (document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) {
+          return;
+        }
+        if (isModalOpen()) return;
+
+        const k = e.key.toLowerCase();
+        const code = e.code;
+
+        if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k)) {
+          e.preventDefault();
+        }
+
+        keys[k] = true;
+        if (code) keys[code] = true;
+
+        if ((k === "e" || code === "KeyE" || k === "enter" || k === " ") && activeStation) {
+          clearKeys();
+          onInteract(activeStation.id);
+        }
+      },
+      { passive: false }
+    );
 
     window.addEventListener("keyup", (e) => {
-      keys[e.key.toLowerCase()] = false;
+      const k = e.key.toLowerCase();
+      keys[k] = false;
+      if (e.code) keys[e.code] = false;
     });
 
-    canvas.addEventListener("click", (e) => {
+    // Wire up On-Screen D-Pad buttons
+    document.querySelectorAll(".dpad-btn").forEach((btn) => {
+      const dir = btn.dataset.dir;
+      const press = (ev) => {
+        ev.preventDefault();
+        if (isModalOpen()) return;
+        focusGameCanvas(canvas);
+        player.targetX = null;
+        player.targetY = null;
+        dpad[dir] = true;
+        btn.classList.add("pressed");
+      };
+      const release = () => {
+        dpad[dir] = false;
+        btn.classList.remove("pressed");
+      };
+
+      btn.addEventListener("pointerdown", press);
+      btn.addEventListener("pointerup", release);
+      btn.addEventListener("pointerleave", release);
+      btn.addEventListener("pointercancel", release);
+    });
+
+    canvas.addEventListener("pointerdown", (e) => {
+      focusGameCanvas(canvas);
+      if (isModalOpen()) return;
+
       const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
       const scaleY = canvas.height / rect.height;
@@ -128,6 +207,7 @@ ACM.World = (function () {
 
       const clickedStation = STATIONS.find((s) => Math.hypot(worldX - s.x, worldY - s.y) < 62);
       if (clickedStation && Math.hypot(player.x - clickedStation.x, player.y - clickedStation.y) < 105) {
+        clearKeys();
         onInteract(clickedStation.id);
         return;
       }
@@ -138,7 +218,6 @@ ACM.World = (function () {
   }
 
   function updateAmbient(state) {
-    // Rabbits hop & scamper if player gets close
     rabbits.forEach((r) => {
       const distPlayer = Math.hypot(player.x - r.x, player.y - r.y);
       if (distPlayer < 95 && r.hopZ === 0) {
@@ -171,7 +250,6 @@ ACM.World = (function () {
       }
     });
 
-    // Birds glide across sky
     birds.forEach((b) => {
       b.x += b.speed;
       b.wingPhase += 0.16;
@@ -181,7 +259,6 @@ ACM.World = (function () {
       }
     });
 
-    // Weather particles
     const weather = state.weather || "Sunny";
     const season = state.season || "Spring";
     particles.forEach((p) => {
@@ -211,13 +288,20 @@ ACM.World = (function () {
 
   function update(state) {
     tick++;
+
+    if (isModalOpen()) {
+      clearKeys();
+      updateAmbient(state);
+      return;
+    }
+
     let dx = 0;
     let dy = 0;
 
-    if (keys["w"] || keys["arrowup"]) dy -= 1;
-    if (keys["s"] || keys["arrowdown"]) dy += 1;
-    if (keys["a"] || keys["arrowleft"]) dx -= 1;
-    if (keys["d"] || keys["arrowright"]) dx += 1;
+    if (keys["w"] || keys["KeyW"] || keys["arrowup"] || keys["ArrowUp"] || dpad.up) dy -= 1;
+    if (keys["s"] || keys["KeyS"] || keys["arrowdown"] || keys["ArrowDown"] || dpad.down) dy += 1;
+    if (keys["a"] || keys["KeyA"] || keys["arrowleft"] || keys["ArrowLeft"] || dpad.left) dx -= 1;
+    if (keys["d"] || keys["KeyD"] || keys["arrowright"] || keys["ArrowRight"] || dpad.right) dx += 1;
 
     if (dx !== 0 || dy !== 0) {
       player.targetX = null;
@@ -226,7 +310,6 @@ ACM.World = (function () {
       dx = (dx / len) * player.speed;
       dy = (dy / len) * player.speed;
     } else if (player.targetX !== null && player.targetY !== null) {
-      const dist = Math.hypot(player.targetX - player.x, player.y - player.y);
       const fullDist = Math.hypot(player.targetX - player.x, player.targetY - player.y);
       if (fullDist > 4) {
         dx = ((player.targetX - player.x) / fullDist) * player.speed;
@@ -255,13 +338,11 @@ ACM.World = (function () {
       player.frame = 0;
     }
 
-    // Center camera smoothly on player
     camera.x = Math.max(0, Math.min(WORLD_W - VIEW_W, Math.round(player.x - VIEW_W / 2)));
     camera.y = Math.max(0, Math.min(WORLD_H - VIEW_H, Math.round(player.y - VIEW_H / 2)));
 
     updateAmbient(state);
 
-    // Closest interactive station
     let nearest = null;
     let minDist = 96;
     STATIONS.forEach((s) => {
@@ -291,6 +372,16 @@ ACM.World = (function () {
     ctx.translate(-camera.x, -camera.y);
     ACM.ArtSprites.drawWorld(ctx, state, worldData, tick);
 
+    // Draw click-to-walk destination ring on ground
+    if (player.targetX !== null && player.targetY !== null) {
+      const r = 8 + Math.sin(tick * 0.2) * 3;
+      ctx.strokeStyle = "#fef08a";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(player.targetX, player.targetY, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     const gear = {
       safety_glasses: state.ownedTools.includes("safety_glasses"),
       ear_muffs: state.ownedTools.includes("ear_muffs")
@@ -319,6 +410,8 @@ ACM.World = (function () {
     init,
     update,
     render,
-    getActiveStation
+    getActiveStation,
+    clearKeys,
+    focusGameCanvas
   };
 })();
