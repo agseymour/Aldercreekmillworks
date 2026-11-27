@@ -1,6 +1,41 @@
 window.ACM = window.ACM || {};
 
 ACM.ArtSprites = (function () {
+  const SEASON_PALETTES = {
+    Spring: {
+      grass: "#568c4a",
+      grassAlt: "#67a159",
+      path: "#c2a87d",
+      foliage: "#40916c",
+      roofTint: null,
+      water: "#3b82f6"
+    },
+    Summer: {
+      grass: "#467a3c",
+      grassAlt: "#558f49",
+      path: "#bfa274",
+      foliage: "#2d6a4f",
+      roofTint: null,
+      water: "#2563eb"
+    },
+    Autumn: {
+      grass: "#8c7a3e",
+      grassAlt: "#a38c46",
+      path: "#b08d57",
+      foliage: "#d97706",
+      roofTint: null,
+      water: "#3b76a8"
+    },
+    Winter: {
+      grass: "#dce8f2",
+      grassAlt: "#cbdbe8",
+      path: "#9aa8b8",
+      foliage: "#264d3b",
+      roofTint: "rgba(241, 245, 249, 0.72)",
+      water: "#7dd3fc"
+    }
+  };
+
   function drawCharacter(ctx, x, y, appearance, scale = 1, frame = 0, facing = "down", gear = {}) {
     if (!ctx) return;
     const app = appearance || {};
@@ -10,8 +45,8 @@ ACM.ArtSprites = (function () {
 
     const bob = frame % 2 === 1 ? -1 : 0;
 
-    // Shadow
-    ctx.fillStyle = "rgba(0,0,0,0.28)";
+    // Ground Shadow
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
     ctx.fillRect(-8, 12, 16, 4);
 
     // Boots
@@ -21,14 +56,15 @@ ACM.ArtSprites = (function () {
     ctx.fillRect(1, 9 + (stepOffset < 0 ? -1 : 0), 5, 5);
 
     // Work Pants
-    ctx.fillStyle = "#2d4059";
+    ctx.fillStyle = "#263849";
     ctx.fillRect(-6, 2 + bob, 12, 8);
 
-    // Flannel Shirt
+    // Flannel Shirt + Shading
     ctx.fillStyle = app.shirt || "#a83232";
     ctx.fillRect(-7, -8 + bob, 14, 11);
-    ctx.fillStyle = "rgba(255,255,255,0.2)";
+    ctx.fillStyle = "rgba(255,255,255,0.22)";
     ctx.fillRect(-7, -4 + bob, 14, 2);
+    ctx.fillRect(-3, -8 + bob, 2, 11);
 
     // Shop Apron
     ctx.fillStyle = app.apron || "#6b4423";
@@ -48,7 +84,7 @@ ACM.ArtSprites = (function () {
     ctx.fillStyle = app.skin || "#f3c69f";
     ctx.fillRect(-6, -20 + bob, 12, 12);
 
-    // Hair
+    // Hair / Hat
     ctx.fillStyle = app.hair || "#3b2618";
     ctx.fillRect(-7, -22 + bob, 14, 5);
     if (facing !== "up") {
@@ -56,14 +92,14 @@ ACM.ArtSprites = (function () {
       ctx.fillRect(5, -19 + bob, 2, 5);
     }
 
-    // Eyes & PPE
+    // Face & PPE
     if (facing !== "up") {
       ctx.fillStyle = "#1c1917";
       ctx.fillRect(-4, -15 + bob, 2, 2);
       ctx.fillRect(2, -15 + bob, 2, 2);
 
       if (gear.safety_glasses) {
-        ctx.fillStyle = "rgba(165, 243, 252, 0.75)";
+        ctx.fillStyle = "rgba(186, 230, 253, 0.8)";
         ctx.fillRect(-5, -16 + bob, 4, 3);
         ctx.fillRect(1, -16 + bob, 4, 3);
         ctx.fillStyle = "#0284c7";
@@ -82,89 +118,308 @@ ACM.ArtSprites = (function () {
     ctx.restore();
   }
 
-  function drawWorkshopMap(ctx, state, stations, tick) {
-    const W = 840;
-    const H = 500;
+  function drawBuildingRoof(ctx, x, y, w, h, roofColor, trimColor, pal) {
+    // Drop shadow
+    ctx.fillStyle = "rgba(0,0,0,0.28)";
+    ctx.fillRect(x + 6, y + 8, w, h);
 
-    // Timber Workshop Floor (Left 580px)
-    ctx.fillStyle = "#7b5233";
-    ctx.fillRect(0, 0, 580, H);
+    // Main Shingled Roof
+    ctx.fillStyle = roofColor;
+    ctx.fillRect(x, y, w, h);
 
-    ctx.fillStyle = "#644026";
-    for (let y = 0; y < H; y += 28) {
-      ctx.fillRect(0, y, 580, 2);
-      for (let x = (y % 56 === 0 ? 40 : 0); x < 580; x += 96) {
-        ctx.fillRect(x, y, 2, 28);
+    // Horizontal shingle courses
+    ctx.fillStyle = "rgba(0,0,0,0.18)";
+    for (let sy = y + 10; sy < y + h; sy += 10) {
+      ctx.fillRect(x, sy, w, 2);
+    }
+
+    // Ridge beam
+    ctx.fillStyle = trimColor;
+    ctx.fillRect(x, y + Math.floor(h * 0.45), w, 5);
+    ctx.strokeStyle = "#29180e";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, w, h);
+
+    // Winter snow cap on roof
+    if (pal.roofTint) {
+      ctx.fillStyle = pal.roofTint;
+      ctx.fillRect(x + 3, y + 3, w - 6, Math.floor(h * 0.4));
+    }
+  }
+
+  function drawTree(ctx, x, y, tree, pal, tick) {
+    ctx.save();
+    ctx.translate(Math.round(x), Math.round(y));
+
+    // Soil mound
+    ctx.fillStyle = "#5c3d24";
+    ctx.fillRect(-16, 6, 32, 10);
+
+    if (tree.stage === 0) {
+      // Tiny Sapling
+      ctx.fillStyle = "#6b4423";
+      ctx.fillRect(-2, -6, 4, 14);
+      ctx.fillStyle = pal.foliage;
+      ctx.fillRect(-7, -12, 14, 8);
+      ctx.fillRect(-4, -16, 8, 5);
+    } else if (tree.stage === 1) {
+      // Young Sapling Tree
+      ctx.fillStyle = "#5c3822";
+      ctx.fillRect(-4, -14, 8, 22);
+      ctx.fillStyle = pal.foliage;
+      ctx.fillRect(-16, -28, 32, 18);
+      ctx.fillRect(-11, -38, 22, 12);
+    } else {
+      // Full Mature Harvestable Tree
+      const sway = Math.sin(tick * 0.03 + x) * 1.5;
+      ctx.fillStyle = "rgba(0,0,0,0.25)";
+      ctx.fillRect(-20, 8, 40, 8);
+
+      // Trunk
+      ctx.fillStyle = "#4a2c18";
+      ctx.fillRect(-6, -22, 12, 30);
+
+      // Layered Canopy
+      const canopy =
+        pal === SEASON_PALETTES.Autumn && tree.species.includes("Maple")
+          ? "#dc2626"
+          : pal === SEASON_PALETTES.Autumn && tree.species.includes("Cherry")
+          ? "#ea580c"
+          : tree.canopyColor || pal.foliage;
+
+      ctx.fillStyle = canopy;
+      ctx.fillRect(-24 + sway, -48, 48, 28);
+      ctx.fillRect(-18 + sway, -62, 36, 18);
+      ctx.fillStyle = "rgba(255,255,255,0.14)";
+      ctx.fillRect(-16 + sway, -58, 16, 10);
+
+      if (pal.roofTint) {
+        ctx.fillStyle = pal.roofTint;
+        ctx.fillRect(-18 + sway, -62, 36, 9);
       }
     }
 
-    // Outdoor Courtyard & Cobblestone Path (Right 260px)
-    ctx.fillStyle = "#4c7c44";
-    ctx.fillRect(580, 0, 260, H);
-    ctx.fillStyle = "#5f9655";
-    for (let gx = 600; gx < 820; gx += 44) {
-      for (let gy = 30; gy < 470; gy += 52) {
-        ctx.fillRect(gx, gy, 6, 4);
-        ctx.fillRect(gx + 3, gy - 3, 4, 4);
-      }
-    }
-    ctx.fillStyle = "#9c9488";
-    ctx.fillRect(580, 210, 220, 80);
-    ctx.fillStyle = "#7d7569";
-    for (let cx = 590; cx < 790; cx += 24) {
-      ctx.fillRect(cx, 222, 16, 12);
-      ctx.fillRect(cx + 8, 250, 16, 12);
+    ctx.restore();
+  }
+
+  function drawHomestead(ctx, homeStage, pal) {
+    const hx = 1140;
+    const hy = 640;
+
+    // Cleared Homestead Yard
+    ctx.fillStyle = pal === SEASON_PALETTES.Winter ? "#cbd5e1" : "#8c6d46";
+    ctx.fillRect(hx - 20, hy - 20, 260, 210);
+    ctx.strokeStyle = "#5c3d24";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(hx - 20, hy - 20, 260, 210);
+
+    if (homeStage === 0) {
+      // Survey Stakes & Rope
+      ctx.fillStyle = "#d97706";
+      [[hx + 20, hy + 20], [hx + 190, hy + 20], [hx + 20, hy + 140], [hx + 190, hy + 140]].forEach(([sx, sy]) => {
+        ctx.fillRect(sx, sy, 6, 16);
+      });
+      ctx.strokeStyle = "#fef08a";
+      ctx.setLineDash([5, 5]);
+      ctx.strokeRect(hx + 23, hy + 24, 170, 120);
+      ctx.setLineDash([]);
+      return;
     }
 
-    // Timber Barn Walls
-    ctx.fillStyle = "#3c2314";
-    ctx.fillRect(0, 0, 580, 34);
-    ctx.fillRect(0, 0, 18, H);
-    ctx.fillRect(0, H - 18, 580, 18);
-    ctx.fillRect(566, 0, 18, 200);
-    ctx.fillRect(566, 300, 18, 200);
+    // Stage 1+: Stone Foundation
+    ctx.fillStyle = "#64748b";
+    ctx.fillRect(hx + 20, hy + 25, 175, 125);
+    ctx.strokeStyle = "#334155";
+    ctx.strokeRect(hx + 20, hy + 25, 175, 125);
 
-    // Sunlit Windows
-    [110, 340].forEach((wx) => {
-      ctx.fillStyle = "#fde68a";
-      ctx.fillRect(wx, 6, 74, 22);
+    if (homeStage >= 2) {
+      // Timber Walls
+      ctx.fillStyle = homeStage >= 4 ? "#b45309" : "#9a6b43";
+      ctx.fillRect(hx + 26, hy + 55, 163, 88);
+      // Front Door
+      ctx.fillStyle = "#451a03";
+      ctx.fillRect(hx + 96, hy + 102, 24, 41);
+      ctx.fillStyle = "#facc15";
+      ctx.fillRect(hx + 114, hy + 122, 3, 3);
+    }
+
+    if (homeStage >= 3) {
+      // Cedar Shingle Roof & Porch Deck
       ctx.fillStyle = "#78350f";
-      ctx.fillRect(wx + 35, 6, 4, 22);
-      ctx.fillStyle = "rgba(254, 243, 199, 0.12)";
-      ctx.beginPath();
-      ctx.moveTo(wx, 34);
-      ctx.lineTo(wx + 74, 34);
-      ctx.lineTo(wx + 94, 130);
-      ctx.lineTo(wx - 20, 130);
-      ctx.closePath();
-      ctx.fill();
+      ctx.fillRect(hx + 20, hy + 143, 175, 22); // Front Porch
+      drawBuildingRoof(ctx, hx + 16, hy + 10, 183, 56, "#7c2d12", "#d97706", pal);
+    }
+
+    if (homeStage >= 4) {
+      // Sunny Windows + Stone Chimney
+      ctx.fillStyle = "#fef08a";
+      ctx.fillRect(hx + 46, hy + 96, 28, 24);
+      ctx.fillRect(hx + 140, hy + 96, 28, 24);
+      ctx.strokeStyle = "#451a03";
+      ctx.strokeRect(hx + 46, hy + 96, 28, 24);
+      ctx.strokeRect(hx + 140, hy + 96, 28, 24);
+
+      // Stone Chimney
+      ctx.fillStyle = "#475569";
+      ctx.fillRect(hx + 162, hy - 8, 22, 34);
+    }
+
+    if (homeStage >= 5) {
+      // Master Veranda Railings & Flower Boxes
+      ctx.fillStyle = "#dc2626";
+      ctx.fillRect(hx + 46, hy + 120, 28, 6);
+      ctx.fillRect(hx + 140, hy + 120, 28, 6);
+      ctx.fillStyle = "#22c55e";
+      ctx.fillRect(hx + 28, hy + 158, 60, 8);
+      ctx.fillRect(hx + 126, hy + 158, 60, 8);
+    }
+  }
+
+  function drawWorld(ctx, state, worldData, tick) {
+    const pal = SEASON_PALETTES[state.season] || SEASON_PALETTES.Spring;
+    const W = worldData.width;
+    const H = worldData.height;
+
+    // 1. Seasonal Meadow Background
+    ctx.fillStyle = pal.grass;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = pal.grassAlt;
+    for (let gx = 20; gx < W; gx += 64) {
+      for (let gy = 20; gy < H; gy += 64) {
+        ctx.fillRect(gx, gy, 10, 6);
+        ctx.fillRect(gx + 28, gy + 30, 8, 5);
+      }
+    }
+
+    // 2. Winding Alder Creek Stream (between Workshop/Woodlot and Town/Shops)
+    ctx.fillStyle = pal.water;
+    ctx.fillRect(600, 0, 46, H);
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    const ripple = (tick * 1.2) % 40;
+    for (let wy = ripple; wy < H; wy += 40) {
+      ctx.fillRect(610, wy, 12, 3);
+      ctx.fillRect(626, wy + 18, 10, 3);
+    }
+
+    // 3. Dirt & Cobblestone Village Paths + Wooden Bridges
+    ctx.fillStyle = pal.path;
+    // Main East-West Avenue
+    ctx.fillRect(280, 335, 1040, 56);
+    // North spurs to Seymour's & Routledge's
+    ctx.fillRect(810, 260, 48, 85);
+    ctx.fillRect(1260, 275, 48, 70);
+    // South spur to Town Square, Woodlot & Homestead
+    ctx.fillRect(810, 385, 48, 220);
+    ctx.fillRect(340, 560, 920, 48);
+    ctx.fillRect(1230, 560, 48, 120);
+
+    // Timber Bridges over Alder Creek
+    [330, 555].forEach((by) => {
+      ctx.fillStyle = "#6b4423";
+      ctx.fillRect(592, by, 62, 64);
+      ctx.fillStyle = "#3b2416";
+      ctx.fillRect(592, by, 62, 6);
+      ctx.fillRect(592, by + 58, 62, 6);
     });
 
-    // Fire Extinguisher if owned
+    // 4. PLAYER'S OPEN-BEAM TIMBER WORKSHOP (Top-Left: x 50..540, y 50..460)
+    ctx.fillStyle = "#7b5233";
+    ctx.fillRect(50, 50, 490, 410);
+    ctx.fillStyle = "#644026";
+    for (let y = 50; y < 460; y += 28) {
+      ctx.fillRect(50, y, 490, 2);
+    }
+    // Workshop Timber Walls & Roof Overhang
+    ctx.fillStyle = "#3c2314";
+    ctx.fillRect(50, 50, 490, 32);
+    ctx.fillRect(50, 50, 16, 410);
+    ctx.fillRect(50, 444, 490, 16);
+    ctx.fillRect(524, 50, 16, 265);
+    ctx.fillRect(524, 405, 16, 55);
+
+    // Sunlit Windows & Fire Extinguisher
+    [130, 350].forEach((wx) => {
+      ctx.fillStyle = "#fde68a";
+      ctx.fillRect(wx, 56, 70, 20);
+    });
     if (state.ownedTools.includes("fire_extinguisher")) {
       ctx.fillStyle = "#dc2626";
-      ctx.fillRect(255, 10, 10, 18);
-      ctx.fillStyle = "#111827";
-      ctx.fillRect(257, 7, 6, 3);
+      ctx.fillRect(265, 58, 10, 18);
     }
 
-    // Sawdust Piles
+    // Sawdust Piles inside Workshop
     const pileCount = Math.floor(state.sawdustHazard / 12);
     ctx.fillStyle = "#e5c07b";
     const spots = [
-      [190, 290], [320, 340], [240, 390], [410, 280],
-      [150, 360], [360, 410], [280, 250], [450, 370]
+      [180, 300], [310, 340], [230, 390], [400, 290],
+      [140, 370], [350, 400], [270, 250], [440, 360]
     ];
     for (let i = 0; i < Math.min(pileCount, spots.length); i++) {
-      const [sx, sy] = spots[i];
-      ctx.fillRect(sx - 12, sy - 5, 24, 10);
+      ctx.fillRect(spots[i][0] - 12, spots[i][1] - 5, 24, 10);
     }
 
-    stations.forEach((st) => drawStationObject(ctx, st, state, tick));
+    // 5. SEYMOUR'S HARDWARE & TOOLS BUILDING (Top-Center: x 710..950, y 70..265)
+    ctx.fillStyle = "#8f3b2e"; // Brick facade
+    ctx.fillRect(720, 145, 220, 115);
+    drawBuildingRoof(ctx, 710, 75, 240, 78, "#334155", "#d49b35", pal);
+    // Red & Cream Awning + Shop Windows
+    ctx.fillStyle = "#dc2626";
+    ctx.fillRect(732, 185, 196, 18);
+    ctx.fillStyle = "#fef08a";
+    ctx.fillRect(745, 206, 54, 36);
+    ctx.fillRect(860, 206, 54, 36);
+    ctx.fillStyle = "#451a03";
+    ctx.fillRect(816, 208, 28, 52);
+    // Seymour NPC standing on porch!
+    drawCharacter(ctx, 795, 268, { skin: "#f3c69f", hair: "#3b2618", shirt: "#2b4c7e", apron: "#6b4423" }, 1.2, 0, "down", { safety_glasses: true });
 
-    // NPCs
-    drawCharacter(ctx, 745, 95, { skin: "#e0a97c", hair: "#6e737b", shirt: "#2e5e4e", apron: "#3d4852" }, 1.15, 0, "down", {});
-    drawCharacter(ctx, 745, 365, { skin: "#f3c69f", hair: "#8c4a27", shirt: "#2b4c7e", apron: "#8a6d3b" }, 1.15, 0, "down", {});
+    // 6. ROUTLEDGE'S SAWMILL & NURSERY (Top-Right: x 1140..1450, y 70..280)
+    ctx.fillStyle = "#6b4423"; // Log cabin timber walls
+    ctx.fillRect(1155, 150, 270, 125);
+    drawBuildingRoof(ctx, 1140, 75, 300, 82, "#1e3a2f", "#d97706", pal);
+    // Stacked Lumber Yard & Sapling Nursery Display
+    ctx.fillStyle = "#fde68a";
+    ctx.fillRect(1340, 220, 72, 14);
+    ctx.fillStyle = "#d97706";
+    ctx.fillRect(1340, 238, 72, 14);
+    // Sapling crates
+    ctx.fillStyle = "#22c55e";
+    ctx.fillRect(1170, 235, 16, 16);
+    ctx.fillRect(1194, 235, 16, 16);
+    // Routledge NPC standing outside Sawmill!
+    drawCharacter(ctx, 1255, 282, { skin: "#e0a97c", hair: "#6e737b", shirt: "#2e5e4e", apron: "#3d4852" }, 1.2, 0, "down", {});
+
+    // 7. TOWN SQUARE COBBLESTONE PLAZA (Bottom-Center: x 720..950, y 520..680)
+    ctx.fillStyle = "#94a3b8";
+    ctx.fillRect(725, 535, 215, 130);
+    ctx.strokeStyle = "#475569";
+    ctx.strokeRect(725, 535, 215, 130);
+
+    // 8. PLAYER'S HOMESTEAD PLOT (Bottom-Right: x 1120..1400, y 620..850)
+    drawHomestead(ctx, state.homeStage || 0, pal);
+
+    // 9. ALDER CREEK WOODLOT TREES (Bottom-Left: x 80..540, y 540..960)
+    (state.trees || []).forEach((tree) => {
+      drawTree(ctx, tree.x, tree.y, tree, pal, tick);
+    });
+
+    // 10. Interactive Stations & Signs
+    worldData.stations.forEach((st) => drawStationObject(ctx, st, state, tick));
+
+    // 11. Ambient Hopping Rabbits
+    worldData.rabbits.forEach((r) => {
+      ctx.save();
+      ctx.translate(Math.round(r.x), Math.round(r.y - r.hopZ));
+      ctx.fillStyle = state.season === "Winter" ? "#f8fafc" : "#d6c7b2";
+      ctx.fillRect(-5, -4, 10, 7); // body
+      ctx.fillRect(3, -8, 5, 5); // head
+      ctx.fillRect(4, -14, 2, 6); // ears
+      ctx.fillRect(7, -13, 2, 6);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(-7, -3, 3, 3); // cotton tail
+      ctx.restore();
+    });
   }
 
   function drawStationObject(ctx, st, state, tick) {
@@ -173,94 +428,137 @@ ACM.ArtSprites = (function () {
 
     if (st.id === "blueprint_desk") {
       ctx.fillStyle = "#5c3822";
-      ctx.fillRect(-46, -26, 92, 52);
+      ctx.fillRect(-44, -24, 88, 48);
       ctx.fillStyle = "#93c5fd";
-      ctx.fillRect(-30, -16, 44, 30);
-      ctx.strokeStyle = "#ffffff";
-      ctx.strokeRect(-26, -12, 36, 22);
+      ctx.fillRect(-28, -14, 42, 28);
       ctx.fillStyle = "#f59e0b";
-      ctx.fillRect(24, -14, 12, 12);
-    } else if (st.id === "tool_shop") {
-      ctx.fillStyle = "#4a2c18";
-      ctx.fillRect(-48, -26, 96, 52);
-      ctx.fillStyle = "#d97706";
-      ctx.fillRect(-48, -26, 96, 8);
-      ctx.fillStyle = "#cbd5e1";
-      ctx.fillRect(-34, -12, 18, 22);
-      ctx.fillRect(-4, -12, 8, 22);
-      ctx.fillRect(16, -12, 16, 22);
+      ctx.fillRect(22, -12, 12, 12);
     } else if (st.id === "layout_bench") {
       ctx.fillStyle = "#8c5832";
-      ctx.fillRect(-58, -28, 116, 56);
+      ctx.fillRect(-54, -26, 108, 52);
       ctx.strokeStyle = "#3b2416";
       ctx.lineWidth = 2;
-      ctx.strokeRect(-58, -28, 116, 56);
-      ctx.strokeStyle = "#e2e8f0";
-      ctx.beginPath();
-      ctx.moveTo(-40, -12);
-      ctx.lineTo(-40, 12);
-      ctx.lineTo(-15, 12);
-      ctx.stroke();
-      ctx.fillStyle = "#eab308";
-      ctx.fillRect(18, -8, 16, 16);
-
+      ctx.strokeRect(-54, -26, 108, 52);
       if (state.ownedTools.includes("table_saw")) {
         ctx.fillStyle = "#334155";
-        ctx.fillRect(-56, 36, 34, 28);
-        ctx.fillStyle = "#94a3b8";
-        ctx.fillRect(-42, 42, 6, 16);
+        ctx.fillRect(-50, 34, 32, 24);
       }
       if (state.ownedTools.includes("jointer") || state.ownedTools.includes("planer")) {
         ctx.fillStyle = "#1e3a5f";
-        ctx.fillRect(-14, 36, 36, 28);
+        ctx.fillRect(-10, 34, 34, 24);
       }
       if (state.ownedTools.includes("band_saw")) {
         ctx.fillStyle = "#166534";
-        ctx.fillRect(30, 36, 28, 28);
+        ctx.fillRect(30, 34, 26, 24);
       }
     } else if (st.id === "assembly_table") {
       ctx.fillStyle = "#78492a";
-      ctx.fillRect(-52, -26, 104, 52);
+      ctx.fillRect(-48, -24, 96, 48);
       ctx.fillStyle = "#64748b";
-      ctx.fillRect(-38, -20, 76, 6);
-      ctx.fillRect(-38, 14, 76, 6);
-      ctx.fillStyle = "#f97316";
-      ctx.fillRect(34, -8, 10, 16);
-    } else if (st.id === "lumber_mill") {
-      ctx.fillStyle = "#92400e";
-      ctx.fillRect(-46, -24, 92, 48);
-      ctx.fillStyle = "#fde68a";
-      ctx.fillRect(-40, -18, 80, 10);
-      ctx.fillStyle = "#d97706";
-      ctx.fillRect(-40, -4, 80, 10);
-      ctx.fillStyle = "#78350f";
-      ctx.fillRect(-40, 10, 80, 10);
+      ctx.fillRect(-34, -18, 68, 5);
+      ctx.fillRect(-34, 13, 68, 5);
     } else if (st.id === "town_board") {
       ctx.fillStyle = "#5c3822";
-      ctx.fillRect(-42, -24, 84, 48);
+      ctx.fillRect(-36, -20, 72, 40);
       ctx.fillStyle = "#fef3c7";
-      ctx.fillRect(-32, -16, 26, 30);
+      ctx.fillRect(-26, -12, 22, 24);
       ctx.fillStyle = "#dbeafe";
-      ctx.fillRect(4, -16, 26, 30);
+      ctx.fillRect(4, -12, 22, 24);
+    } else {
+      // Outdoor Wooden Signpost for Seymour's, Routledge's, Woodlot, Homestead
+      ctx.fillStyle = "#451a03";
+      ctx.fillRect(-3, -10, 6, 24);
+      ctx.fillStyle = "#92400e";
+      ctx.fillRect(-22, -18, 44, 16);
     }
 
     const pulse = Math.sin(tick * 0.08) * 1.5;
-    ctx.fillStyle = "rgba(28, 17, 10, 0.86)";
-    ctx.fillRect(-54, -46 + pulse, 108, 17);
+    ctx.fillStyle = "rgba(28, 17, 10, 0.88)";
+    ctx.fillRect(-62, -44 + pulse, 124, 18);
     ctx.strokeStyle = "#d49b35";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(-54, -46 + pulse, 108, 17);
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(-62, -44 + pulse, 124, 18);
 
     ctx.fillStyle = "#fef3c7";
     ctx.font = "bold 11px Trebuchet MS, sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(st.shortLabel, 0, -34 + pulse);
+    ctx.fillText(st.shortLabel, 0, -31 + pulse);
 
     ctx.restore();
   }
 
+  function drawOverlayEffects(ctx, state, worldData) {
+    // Weather Particles (Screen Space 840x500)
+    worldData.particles.forEach((p) => {
+      if (p.kind === "rain") {
+        ctx.strokeStyle = "rgba(186, 230, 253, 0.65)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x - 4, p.y + 12);
+        ctx.stroke();
+      } else if (p.kind === "snow") {
+        ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+        ctx.fillRect(p.x, p.y, 4, 4);
+      } else if (p.kind === "leaf") {
+        ctx.fillStyle = state.season === "Autumn" ? "#ea580c" : "#fbcfe8";
+        ctx.fillRect(p.x, p.y, 6, 4);
+      }
+    });
+
+    // Flying Songbirds
+    worldData.birds.forEach((b) => {
+      const wingY = Math.sin(b.wingPhase) * 4;
+      ctx.strokeStyle = "#1e293b";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(b.x - 6, b.y + wingY);
+      ctx.lineTo(b.x, b.y);
+      ctx.lineTo(b.x + 6, b.y + wingY);
+      ctx.stroke();
+    });
+
+    // Corner Mini-Map (Bottom-Right of Screen)
+    const mw = 136;
+    const mh = 90;
+    const mx = 840 - mw - 12;
+    const my = 500 - mh - 12;
+
+    ctx.fillStyle = "rgba(24, 15, 9, 0.82)";
+    ctx.fillRect(mx, my, mw, mh);
+    ctx.strokeStyle = "#d49b35";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(mx, my, mw, mh);
+
+    const sx = mw / worldData.width;
+    const sy = mh / worldData.height;
+
+    // Creek line on minimap
+    ctx.fillStyle = "#3b82f6";
+    ctx.fillRect(mx + 600 * sx, my, 4, mh);
+
+    // Building dots
+    const landmarks = [
+      { x: 280, y: 240, c: "#d97706" },  // Workshop
+      { x: 830, y: 210, c: "#ef4444" },  // Seymour's
+      { x: 1280, y: 210, c: "#22c55e" }, // Routledge's
+      { x: 310, y: 740, c: "#4ade80" },  // Woodlot
+      { x: 830, y: 600, c: "#94a3b8" },  // Town Board
+      { x: 1240, y: 730, c: "#facc15" }  // Homestead
+    ];
+    landmarks.forEach((lm) => {
+      ctx.fillStyle = lm.c;
+      ctx.fillRect(mx + lm.x * sx - 3, my + lm.y * sy - 3, 6, 6);
+    });
+
+    // Player dot
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(mx + worldData.player.x * sx - 3, my + worldData.player.y * sy - 3, 6, 6);
+  }
+
   return {
     drawCharacter,
-    drawWorkshopMap
+    drawWorld,
+    drawOverlayEffects
   };
 })();
