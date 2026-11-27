@@ -126,6 +126,53 @@ body {
   display: block;
 }
 
+#game-canvas:focus {
+  outline: none;
+}
+
+/* Compact On-Screen D-Pad */
+#dpad-controls {
+  position: absolute;
+  left: 14px;
+  bottom: 52px;
+  width: 96px;
+  height: 96px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 2px;
+  z-index: 15;
+  opacity: 0.82;
+}
+
+#dpad-controls:hover {
+  opacity: 1;
+}
+
+.dpad-btn {
+  background: rgba(44, 26, 16, 0.88);
+  color: #fef3c7;
+  border: 1.5px solid var(--brass);
+  border-radius: 5px;
+  font-size: 0.78rem;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+}
+
+.dpad-btn:active,
+.dpad-btn.pressed {
+  background: var(--brass);
+  color: #241509;
+}
+
+.dpad-up { grid-column: 2; grid-row: 1; }
+.dpad-left { grid-column: 1; grid-row: 2; }
+.dpad-down { grid-column: 2; grid-row: 3; }
+.dpad-right { grid-column: 3; grid-row: 2; }
+
 #interaction-banner {
   width: 100%;
   background: #2c1a10;
