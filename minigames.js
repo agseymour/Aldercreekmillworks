@@ -8,7 +8,7 @@ ACM.Minigames = (function () {
     const unanswered = pool.filter((q) => !game.state.answeredQuestions.includes(q.id));
 
     let html = `
-      <p><strong>Blueprint & Trade Certification Desk</strong> — Study Nova Scotia Production Tech manuals to earn startup capital and unlock higher star tiers.</p>
+      <p><strong>Blueprint & Trade Certification Desk</strong> — Study Nova Scotia Production Tech manuals to earn startup capital and unlock higher-tier equipment.</p>
       <div style="display:flex; gap:10px; flex-wrap:wrap; margin:12px 0;">
         <button class="btn-brass" id="btn-study-q">Practice Trade Question (+$25)</button>
         ${
@@ -99,7 +99,7 @@ ACM.Minigames = (function () {
         if (score >= 2) {
           game.state.certifiedTier = Math.max(game.state.certifiedTier, targetTier);
           ACM.Game.playTone(780, 0.25);
-          stage.innerHTML = `<div class="item-card owned"><h3>Passed Tier ${targetTier}★ Certification (${score}/3)!</h3><p>You are now certified to unlock Tier ${targetTier}★ machinery and customer commissions.</p></div>`;
+          stage.innerHTML = `<div class="item-card owned"><h3>Passed Tier ${targetTier}★ Certification (${score}/3)!</h3><p>Seymour and Routledge have unlocked Tier ${targetTier}★ tools and lumber for your shop.</p></div>`;
         } else {
           ACM.Game.playTone(190, 0.25);
           stage.innerHTML = `<div class="item-card"><h3>Exam Score: ${score}/3</h3><p>You need at least 2/3 correct to certify. Study the practice questions and try again!</p></div>`;
@@ -115,26 +115,22 @@ ACM.Minigames = (function () {
     next();
   }
 
-  /**
-   * Layout & Milling Bench: Tape Measure Minigame + S4S Milling Order
-   */
   function openLayoutBench(game) {
     const job = game.getActiveProject();
     if (!job) {
-      game.openModal("Layout & Milling Bench", `<p>You don't have an active customer commission yet. Walk over to the <strong>Town & Client Board</strong> to accept a project first!</p>`);
+      game.openModal("Layout & Milling Bench", `<p>No active commission on the bench. Walk down to the <strong>Town Commission Board</strong> in the village square to accept a job!</p>`);
       return;
     }
 
     const prog = game.state.jobProgress;
     if (!prog.lumberAssigned) {
-      // Let player assign compatible lumber from their inventory
       const validStocks = ACM.LUMBER.filter(
         (l) => job.lumberReq.allowedIds.includes(l.id) && (game.state.lumberStock[l.id] || 0) >= job.lumberReq.units
       );
 
       let html = `<p><strong>Active Project:</strong> ${job.title} (Needs ${job.lumberReq.units} units of approved stock)</p>`;
       if (validStocks.length === 0) {
-        html += `<p style="color:#b91c1c; margin-top:8px;">You don't have enough approved lumber in stock! Visit the <strong>Lumber Mill</strong> outside to purchase ${job.lumberReq.units} units of: <strong>${job.lumberReq.allowedIds.map((id) => ACM.LUMBER.find((x) => x.id === id).name).join(", ")}</strong>.</p>`;
+        html += `<p style="color:#b91c1c; margin-top:8px;">You don't have enough approved lumber in stock! Visit <strong>Routledge's Sawmill</strong> or harvest mature trees in <strong>Your Woodlot</strong> to gather ${job.lumberReq.units} units of: <strong>${job.lumberReq.allowedIds.map((id) => ACM.LUMBER.find((x) => x.id === id).name).join(", ")}</strong>.</p>`;
       } else {
         html += `<p style="margin-top:8px;">Select lumber from your rack to begin layout:</p><div class="card-grid">`;
         validStocks.forEach((l) => {
@@ -165,7 +161,6 @@ ACM.Minigames = (function () {
 
     const lumberObj = ACM.LUMBER.find((l) => l.id === prog.lumberAssigned);
 
-    // Step 1: Tape Measure Fractional Layout for each cut in job.cuts
     if (prog.cutIndex < job.cuts.length) {
       const cut = job.cuts[prog.cutIndex];
       const stepSize = 1 / job.precisionDenom;
@@ -220,7 +215,6 @@ ACM.Minigames = (function () {
       return;
     }
 
-    // Step 2: Milling & Cutting Tool Sequence
     const millingTools = job.workflow.filter((tid) =>
       ["jointer", "planer", "table_saw", "mitre_saw", "crosscut_saw", "back_saw", "band_saw", "japanese_back_saw"].includes(tid)
     );
@@ -256,7 +250,7 @@ ACM.Minigames = (function () {
       html += `
         <div class="item-card ${done ? "owned" : !owned ? "locked" : ""}">
           <div class="item-title">${tool.name}</div>
-          <div class="item-meta">${owned ? `Sharpness: ${game.state.toolDurability[tid] ?? tool.maxDurability}/${tool.maxDurability}` : "Not owned — buy at Tool Shop"}</div>
+          <div class="item-meta">${owned ? `Sharpness: ${game.state.toolDurability[tid] ?? tool.maxDurability}/${tool.maxDurability}` : "Not owned — visit Seymour's Hardware"}</div>
           <button class="btn-wood btn-sm run-tool-btn" data-tid="${tid}" ${!owned || done ? "disabled" : ""}>
             ${done ? "Completed" : owned ? "Run Operation" : "Locked"}
           </button>
@@ -283,14 +277,12 @@ ACM.Minigames = (function () {
     document.querySelectorAll(".run-tool-btn").forEach((btn) => {
       btn.onclick = () => {
         const tid = btn.dataset.tid;
-        // Enforce Jointer before Planer!
         if (tid === "planer" && millingTools.includes("jointer") && !prog.completedTools.includes("jointer")) {
           prog.mistakes++;
           ACM.Game.playTone(180, 0.25);
           game.toast("Milling Error! Flatten one reference face on the Jointer BEFORE using the Planer.", "bad");
           return;
         }
-        // Check Reclaimed Nail hazard on Jointer/Planer
         if ((tid === "jointer" || tid === "planer") && lumberObj.nailRisk > 0 && !prog.nailChecked) {
           game.state.cash = Math.max(0, game.state.cash - 45);
           prog.nailChecked = true;
@@ -301,21 +293,19 @@ ACM.Minigames = (function () {
           return;
         }
 
-        // Check Safety Gear prerequisites
         const toolObj = ACM.TOOLS.find((x) => x.id === tid);
         const missingGear = toolObj.requiresSafety.filter((sid) => !game.state.ownedTools.includes(sid));
         if (missingGear.length > 0) {
           const names = missingGear.map((sid) => ACM.TOOLS.find((x) => x.id === sid).name).join(", ");
-          game.toast(`Safety Stop! You must own: ${names}`, "bad");
+          game.toast(`Safety Stop! Buy ${names} at Seymour's Hardware first.`, "bad");
           return;
         }
 
-        // Wear durability & generate sawdust
         if (game.state.toolDurability[tid] !== undefined && game.state.toolDurability[tid] < 500) {
           game.state.toolDurability[tid] = Math.max(0, game.state.toolDurability[tid] - 1);
           if (game.state.toolDurability[tid] === 0) {
             prog.mistakes++;
-            game.toast(`${toolObj.name} blade is dull! Tear-out occurred. Sharpen it at the Tool Shop.`, "bad");
+            game.toast(`${toolObj.name} blade is dull! Tear-out occurred. Sharpen it at Seymour's Hardware.`, "bad");
           }
         }
 
@@ -331,13 +321,10 @@ ACM.Minigames = (function () {
     });
   }
 
-  /**
-   * Assembly & Finishing Table: Square check, Pilot holes, Fastening & Delivery
-   */
   function openAssemblyTable(game) {
     const job = game.getActiveProject();
     if (!job) {
-      game.openModal("Assembly & Finishing Table", `<p>No active build on the bench. Accept a customer order at the <strong>Town & Client Board</strong>.</p>`);
+      game.openModal("Assembly & Finishing Table", `<p>No active build on the bench. Accept a customer order at the <strong>Town Commission Board</strong>.</p>`);
       return;
     }
 
@@ -386,7 +373,7 @@ ACM.Minigames = (function () {
     if (pilotBtn) {
       pilotBtn.onclick = () => {
         if (!game.state.ownedTools.includes("cordless_drill")) {
-          game.toast("You need a Cordless Drill from the Tool Shop to bore pilot holes!", "bad");
+          game.toast("You need a Cordless Drill from Seymour's Hardware to bore pilot holes!", "bad");
           return;
         }
         prog.piloted = true;
