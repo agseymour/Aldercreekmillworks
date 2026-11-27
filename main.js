@@ -88,8 +88,8 @@ ACM.Game = (function () {
     answeredQuestions: [],
     completedProjectIds: [],
     timeMin: 360,
-    energy: 100,
-    maxEnergy: 100,
+    energy: 150,
+    maxEnergy: 150,
     felled: {},
     wild: [],
     pantry: {},
@@ -259,10 +259,12 @@ ACM.Game = (function () {
     document.getElementById("modal-title").textContent = title;
     document.getElementById("modal-body").innerHTML = bodyHtml;
     document.getElementById("modal-overlay").classList.remove("hidden");
+    if (ACM.Calculator) ACM.Calculator.sync(title, bodyHtml);
   }
 
   function closeModal() {
     document.getElementById("modal-overlay").classList.add("hidden");
+    if (ACM.Calculator) ACM.Calculator.hide();
     if (ACM.World) {
       if (ACM.World.clearKeys) ACM.World.clearKeys();
       if (ACM.World.focusGameCanvas) {
@@ -472,6 +474,7 @@ ACM.Game = (function () {
       return { ok: false, reason: Map_.blocked[Map_.idx(tx, ty)] ? "Something is already growing or standing there." : "Keep this spot clear so people can get through." };
     }
     if (ACM.World.isBlockedTile(tx, ty)) return { ok: false, reason: "Something is in the way." };
+    if (ACM.World.wouldTrap && ACM.World.wouldTrap(tx, ty)) return { ok: false, reason: "A tree there would wall you in! Leave a way through for yourself." };
     return { ok: true };
   }
 
@@ -524,12 +527,12 @@ ACM.Game = (function () {
     return fx;
   }
   function applyMaxEnergy() {
-    const want = 100 + perkFx().maxEnergy;
+    const want = 150 + perkFx().maxEnergy;
     if (state.maxEnergy !== want) { state.energy += Math.max(0, want - state.maxEnergy); state.maxEnergy = want; }
   }
   function spendWork(min, energy) {
     const fx = perkFx();
-    spendTime(Math.round(min * fx.workTime), Math.max(1, Math.round(energy * fx.workEnergy)));
+    spendTime(Math.round(min * fx.workTime), Math.max(1, Math.round(energy * 0.6 * fx.workEnergy)));
   }
   function money(n) { return Math.max(1, Math.round(n * perkFx().shopMult)); }
 
@@ -552,10 +555,41 @@ ACM.Game = (function () {
     applyMaxEnergy();
     state.energy = passedOut ? Math.round(state.maxEnergy * 0.7) : state.maxEnergy;
     if (ACM.Audio) ACM.Audio.sfx("sleep");
-    toast(passedOut ? `You dozed off at your bench and woke at 8:00. (${state.season}, Day ${state.dayCount} — ${state.weather})` : `You slept well. A new day dawns: ${state.season}, Day ${state.dayCount} — ${state.weather}.`, "good");
+    toast(passedOut ? `You woke at 8:00. (${state.season}, Day ${state.dayCount} — ${state.weather})` : `You slept well. A new day dawns: ${state.season}, Day ${state.dayCount} — ${state.weather}.`, "good");
     logEvent("sleep", { passedOut: !!passedOut });
     updateHUD();
     ACM.CloudSync.saveToCloud(state);
+  }
+
+  // At midnight the player collapses: screen fades to black, they wake at home next morning minus $100.
+  let collapsing = false;
+  function collapseAtMidnight(opts) {
+    opts = opts || {};
+    if (collapsing) return;
+    collapsing = true;
+    let el = document.getElementById("blackout");
+    if (!el) { el = document.createElement("div"); el.id = "blackout"; document.body.appendChild(el); }
+    el.textContent = "";
+    if (ACM.World.clearKeys) ACM.World.clearKeys();
+    el.classList.add("on");
+    setTimeout(() => {
+      if (ACM.World.inBuilding && ACM.World.inBuilding()) ACM.World.exitBuilding();
+      closeModal();
+      const lost = opts.noLoss ? 0 : Math.min(100, Math.max(0, Math.round(state.cash)));
+      state.cash -= lost;
+      const sp = ACM.Map.spawn || { tx: 16, ty: 15 };
+      if (ACM.World.debug && ACM.World.debug.teleportTile) ACM.World.debug.teleportTile(sp.tx != null ? sp.tx : Math.floor(sp.x / 32), sp.ty != null ? sp.ty : Math.floor(sp.y / 32));
+      sleepNow(true);
+      logEvent(opts.event || "midnight_collapse", { lost });
+      el.textContent = "Zzz…";
+    }, 1100);
+    setTimeout(() => {
+      el.classList.remove("on");
+      collapsing = false;
+      openModal(opts.title || "You collapsed at midnight", opts.html || `<p><strong>You fell asleep and lost your wallet!</strong></p>
+        <p class="item-meta">Working past midnight caught up with you. You woke up at home the next morning. It cost you $100 (or all you were carrying). Wrap up by evening and sleep in your bed to avoid this.</p>
+        <div class="dialog-actions"><button class="btn-wood" data-act="close">OK</button></div>`);
+    }, 2800);
   }
 
   function eat(cost, energy, label) {
@@ -698,13 +732,33 @@ ACM.Game = (function () {
     if (ACM.Audio) ACM.Audio.sfx("bad");
     return false;
   }
+  // Felling takes several chops: harder woods take longer, each chop costs a little energy and time.
+  const CHOPS = { pine: 6, cedar: 7, birch: 7, maple: 9, oak: 10, cherry: 9, walnut: 11 };
+  let lastChop = 0;
   function fellTree(tx, ty, info) {
     if (!state.ownedTools.includes("felling_axe")) { toast("You need a felling axe to cut trees.", "bad"); return; }
     if (!requireHeld("felling_axe")) return;
     const L = ACM.LOGS[info.type];
     if (!L) { toast("That tree isn't worth cutting.", "bad"); return; }
-    const fe = Math.max(1, Math.round(8 * perkFx().fellEnergy));
-    if (!needEnergy(fe)) return;
+    const now = Date.now();
+    if (now - lastChop < 700) return;          // one swing at a time
+    const ce = Math.max(1, Math.round(2 * perkFx().fellEnergy));
+    if (!needEnergy(ce)) return;
+    lastChop = now;
+    const kk = ty * ACM.Map.W + tx;
+    if (!state.chops) state.chops = {};
+    const need = CHOPS[info.type] || 7;
+    const done = (state.chops[kk] || 0) + 1;
+    spendTime(6, ce);
+    if (done < need) {
+      state.chops[kk] = done;
+      if (ACM.Audio) ACM.Audio.sfx("chop");
+      if (ACM.World.spawnBurst) ACM.World.spawnBurst(tx, ty, "leaves");
+      if (done === 1) toast(`Chop! This ${logName(info.type).toLowerCase()} tree will take about ${need} chops. Keep swinging.`, "");
+      updateHUD();
+      return;
+    }
+    delete state.chops[kk];
     const k = ty * ACM.Map.W + tx;
     let n = L.yieldFell;
     if (info.kind === "planted") {
@@ -712,13 +766,13 @@ ACM.Game = (function () {
       n += 1;
     } else if (info.kind === "wild") {
       state.wild = state.wild.filter((t) => t !== info.obj);
+      state.trees = state.trees.filter((t) => t !== info.obj);
     } else {
       if (!state.felled) state.felled = {};
       state.felled[k] = state.dayCount;
     }
     state.logs[info.type] = (state.logs[info.type] || 0) + n;
     state.stats.felled = (state.stats.felled || 0) + 1;
-    spendTime(20, fe);
     let extra = "";
     const sid = "sapling_" + info.type;
     if (ACM.SAPLINGS.some((s) => s.id === sid) && Math.random() < 0.4) {
@@ -732,6 +786,36 @@ ACM.Game = (function () {
     tutDone("fell");
     updateHUD();
     renderPlantBar();
+    maybeSquirrel();
+  }
+
+  // A rare surprise: a giant squirrel lives in some hollow trunks. The more trees you fell in one day, the likelier it is.
+  function squirrelChance(n) { return Math.min(0.4, 0.02 + 0.015 * (n - 1)); }
+  function maybeSquirrel() {
+    if (!state.feltToday || state.feltToday.day !== state.dayCount) state.feltToday = { day: state.dayCount, n: 0 };
+    state.feltToday.n++;
+    const n = state.feltToday.n;
+    if (Math.random() >= squirrelChance(n)) return false;
+    logEvent("squirrel", { n });
+    setTimeout(() => {
+      openModal("A GIANT SQUIRREL!", `<div style="text-align:center">
+        <canvas id="sq-art" style="width:288px;height:256px;image-rendering:pixelated;max-width:100%"></canvas>
+        <p><strong>The tree was hollow, and something enormous was living in it!</strong></p>
+        <p class="item-meta">A squirrel the size of a dog launches out of the stump, chattering furiously. You drop your axe and run.</p>
+        <div class="dialog-actions"><button class="btn-brass" id="sq-run">Run for it!</button></div></div>`);
+      if (ACM.ArtCritters) ACM.ArtCritters.drawSquirrel(document.getElementById("sq-art"));
+      if (ACM.Audio) ACM.Audio.sfx("bad");
+      document.getElementById("sq-run").onclick = () => {
+        closeModal();
+        collapseAtMidnight({
+          noLoss: true, event: "squirrel_day_end", title: "Chased home",
+          html: `<p><strong>The giant squirrel chased you all the way home!</strong></p>
+            <p class="item-meta">You hid in the workshop until dark, bruised and out of breath. The day is over. Felling lots of trees in a single day makes it more likely that you'll disturb something living in them.</p>
+            <div class="dialog-actions"><button class="btn-wood" data-act="close">OK</button></div>`
+        });
+      };
+    }, 700);
+    return true;
   }
 
   function handleTileAction(tx, ty) {
@@ -740,7 +824,22 @@ ACM.Game = (function () {
     const info = ACM.World.treeInfoAt(tx, ty);
     if (info) {
       if (info.stage >= 2) fellTree(tx, ty, info);
-      else {
+      else if (heldTool() === "felling_axe") {
+        // young trees can't be felled, but they can be dug up again (so nobody gets boxed in by their own saplings)
+        if (info.kind === "planted") {
+          state.trees = state.trees.filter((t) => t !== info.obj);
+          const sid = info.obj.saplingId;
+          if (sid) state.saplingBag[sid] = (state.saplingBag[sid] || 0) + 1;
+          toast(`You dug up the young ${logName(info.type).toLowerCase()}. The sapling is back in your bag.`, "good");
+        } else {
+          state.wild = state.wild.filter((t) => t !== info.obj);
+          toast(`You pulled up a wild ${logName(info.type).toLowerCase()} seedling.`, "good");
+        }
+        spendTime(3, 1);
+        if (ACM.Audio) ACM.Audio.sfx("plant");
+        renderPlantBar();
+        updateHUD();
+      } else {
         const o = info.obj;
         toast(`${logName(info.type)} — ${info.stage === 0 ? "just a seedling" : "young sapling"} (${o.daysGrown}/${o.growDays} days). Check back later!`);
       }
@@ -797,7 +896,8 @@ ACM.Game = (function () {
         else if (M.natureIndex.has(j) && state.felled[j] == null) near = M.natureIndex.get(j).type;
       }
       if (!near) continue;
-      const nt = { tx, ty, type: near, stage: 0, daysGrown: 0, growDays: 4 };
+      if (ACM.World.wouldTrap && ACM.World.wouldTrap(tx, ty)) continue;   // never let the forest wall the player in
+      const nt = { tx, ty, type: near, stage: 0, daysGrown: 0, growDays: 4, wild: true };
       state.wild.push(nt);
       wildAt.set(i, nt);
       seeded++; alive++;
@@ -811,6 +911,19 @@ ACM.Game = (function () {
   function missingMillTools(L) { return L.needs.filter((t) => !state.ownedTools.includes(t)); }
   function toolName(id) { const t = ACM.TOOLS.find((x) => x.id === id); return t ? t.name : id; }
 
+  // The sawmill only needs so much wood each day: the first 12 items sold are paid in full, the rest at a quarter.
+  const MARKET_FULL = 12;
+  function marketValue(unit, n) {
+    if (!state.market || state.market.day !== state.dayCount) state.market = { day: state.dayCount, n: 0 };
+    let tot = 0;
+    for (let i = 0; i < n; i++) tot += Math.max(1, Math.round(unit * (state.market.n + i < MARKET_FULL ? 1 : 0.25)));
+    return tot;
+  }
+  function marketNote() {
+    if (!state.market || state.market.day !== state.dayCount) return "";
+    const left = Math.max(0, MARKET_FULL - state.market.n);
+    return left > 0 ? `Routledge will buy ${left} more item${left === 1 ? "" : "s"} at full price today.` : "Routledge has all the wood he needs today. Anything more sells at a quarter price. Try again tomorrow.";
+  }
   function openLumberRack(note) {
     const logRows = Object.entries(state.logs || {}).filter(([, n]) => n > 0).map(([type, n]) => {
       const L = ACM.LOGS[type];
@@ -830,6 +943,7 @@ ACM.Game = (function () {
     }).join("");
     openModal("Lumber Rack & Log Pile", `
       ${note ? `<p class="tag" style="background:#bbf7d0;margin-bottom:8px;">${escapeHtml(note)}</p>` : ""}
+      <p class="item-meta" style="margin-bottom:6px">${marketNote() || "Routledge will buy 12 items at full price each day."}</p>
       <div class="tut-box"><strong>How wood works:</strong> Fell trees for <em>logs</em>. Sell logs for quick cash, or <em>mill</em> them into boards you can use in commissions (save the money you'd spend on lumber). Milling yourself is free but takes time and energy, and needs the right machines. Routledge will do it for a small fee.</div>
       <h3>Logs</h3>
       ${logRows ? `<table class="shop-table"><tbody>${logRows}</tbody></table>` : "<p class='item-meta'>No logs. Click a tree with your axe to fell it.</p>"}
@@ -845,7 +959,8 @@ ACM.Game = (function () {
       const n = Math.min(Number(el.dataset.n) || 1, state.logs[type] || 0);
       if (n <= 0) return;
       state.logs[type] -= n;
-      const sellVal = Math.round(L.sell * perkFx().sellMult) * n;
+      const sellVal = marketValue(L.sell * perkFx().sellMult, n);
+      state.market.n += n;
       state.cash += sellVal;
       if (ACM.Audio) ACM.Audio.sfx("coin");
       logEvent("sell_log", { type, n, val: sellVal });
@@ -875,7 +990,8 @@ ACM.Game = (function () {
       const l = lumberDef(el.dataset.id);
       if (!l || (state.lumberStock[l.id] || 0) < 1) return;
       state.lumberStock[l.id]--;
-      const p = Math.max(1, Math.round(l.pricePerUnit * ACM.LUMBER_SELL_RATIO));
+      const p = marketValue(l.pricePerUnit * ACM.LUMBER_SELL_RATIO, 1);
+      state.market.n += 1;
       state.cash += p;
       if (ACM.Audio) ACM.Audio.sfx("coin");
       logEvent("sell_board", { id: l.id });
@@ -932,7 +1048,7 @@ ACM.Game = (function () {
       return `<div class="item-card ${isActive ? "owned job-slot" : ""}">
         <div>
           <div class="item-title">${p.title}</div>
-          <div class="item-meta">Client: ${p.client} | Pays: <strong>$${p.basePay}</strong> | +${p.starGain}★ | Tier ${p.tier}</div>
+          <div class="item-meta">Client: ${p.client} | Pays: <strong>$${doneCount && !p.design ? Math.max(1, Math.round(p.basePay * Math.max(0.1, Math.pow(0.5, doneCount)))) + " (repeat order)" : p.basePay}</strong> | +${p.starGain}★ | Tier ${p.tier}</div>
           <p class="item-meta" style="margin-top:4px;">${p.desc}</p>
           <p class="item-meta" style="margin-top:4px;"><strong>Stock:</strong> ${p.lumberReq.units} units (${p.lumberReq.allowedIds.map((id) => (lumberDef(id) || {}).name || id).join(" / ")})</p>
         </div>
@@ -1134,7 +1250,7 @@ ACM.Game = (function () {
   const TUT = [
     { id: "meet_seymour", npc: "seymour", text: "Meet <strong>Seymour</strong>: walk up to the Hardware Shop door (it is open 7:30 AM to 6 PM) and press E to go inside. Then talk to him." },
     { id: "first_delivery", text: "Build your first commission: <strong>Blueprint Desk → Layout Bench → Assembly Table</strong> in your workshop, then take the finished piece to the person who asked for it and hand it over for cash and ★." },
-    { id: "fell", text: "<strong>Equip your felling axe</strong> (select it in the hotbar), then click a tree to <strong>fell</strong> it. Mind your energy (⚡ bar, bottom right)." },
+    { id: "fell", text: "<strong>Equip your felling axe</strong> (select it in the hotbar), then click a tree again and again (it takes several chops) to <strong>fell</strong> it. Mind your energy (⚡ bar, bottom right)." },
     { id: "rack", text: "Sell or mill a log at the <strong>Lumber Rack</strong> beside your workshop." },
     { id: "plant", text: "<strong>Plant a sapling</strong>: pick one in the green bar, then click open grass." },
     { id: "forage", text: "<strong>Forage</strong>: pick berries or mushrooms in the woods (in season) and press <strong>F</strong> to eat. Foraged food spoils in a few days." },
@@ -1361,7 +1477,9 @@ ACM.Game = (function () {
       <tr><td>${k("Esc")}</td><td>Close any window</td></tr>
       <tr><td>${k("↑")}${k("↓")}${k("←")}${k("→")}</td><td>In menus: move between buttons and options, ${k("Enter")} chooses</td></tr>
       <tr><td>${k("H")} ${k("M")}</td><td>This help · mute or unmute sound</td></tr>
-    </tbody></table>`);
+    </tbody></table>
+    <p class="item-meta" style="margin-top:8px">Young trees can be dug up again: click one while holding your felling axe. Full-grown trees take several chops.</p>
+    <div class="dialog-actions"><button class="btn-wood btn-sm" data-act="unstuck">I'm stuck! Take me back to the workshop</button></div>`);
   }
 
   function openWoodlotModal() {
@@ -1550,7 +1668,10 @@ ACM.Game = (function () {
     const Q = prod.quality, fx = perkFx();
     const prog = { lumberAssigned: prod.lumber, mistakes: prod.mistakes };
     const homeMultiplier = (state.homeStage || 0) >= 5 ? 1.15 : 1.0;
-    const netPay = Math.round(job.basePay * Q.pay * (1 + fx.payBonus) * homeMultiplier);
+    // repeat orders of the same commission pay less (so the board can't be farmed); designs and heritage pieces have their own rules
+    const repeats = state.completedProjectIds.filter((id) => id === job.id).length;
+    const repeatF = job.design || job.heritage ? 1 : Math.max(0.1, Math.pow(0.5, repeats));
+    const netPay = Math.max(1, Math.round(job.basePay * Q.pay * (1 + fx.payBonus) * homeMultiplier * repeatF));
     const preferredBonus = job.lumberReq.preferredId && prog.lumberAssigned === job.lumberReq.preferredId ? 0.15 : 0;
     // reputation from easy or repeated work shrinks, so stars can't be farmed on one small job
     const prevBuilds = state.completedProjectIds.filter((id) => id === job.id).length;
@@ -1753,6 +1874,8 @@ ACM.Game = (function () {
     if (typeof state.energy !== "number") state.energy = 100;
     if (!state.maxEnergy) state.maxEnergy = 100;
     if (!state.felled || Array.isArray(state.felled)) state.felled = {};
+    if (!state.chops) state.chops = {};
+    (state.wild || []).forEach((t) => { t.wild = true; });   // older saves: regrown trees were never flagged, so chopping them never removed them
     if (!Array.isArray(state.wild)) state.wild = [];
     if (!state.logs) state.logs = {};
     if (!state.pantry) state.pantry = {};
@@ -1776,6 +1899,7 @@ ACM.Game = (function () {
     if (typeof state.homeStage !== "number") state.homeStage = 0;
     if (ACM.Workshop) ACM.Workshop.migrate(state);
     if (ACM.Drafting) ACM.Drafting.restore(state);
+    applyMaxEnergy();
     if (!Array.isArray(state.products)) state.products = [];
     if (typeof state.dayCount !== "number") state.dayCount = 1;
     if (!state.season) state.season = "Spring";
@@ -1912,7 +2036,7 @@ ACM.Game = (function () {
       canPlant: plantCheck,
       onCycleSapling: cycleSapling,
       onBlockedClick: () => toast("You can't walk there.", "bad"),
-      onMidnight: () => sleepNow(true),
+      onMidnight: () => collapseAtMidnight(),
       npcBubble: npcBubble
     });
 
@@ -1925,6 +2049,7 @@ ACM.Game = (function () {
       else if (act === "report") openReportModal();
       else if (act === "eat") { eatFood(el.dataset.id); openInventoryModal(); }
       else if (act === "inv-tab") { openInventoryModal(el.dataset.tab); }
+      else if (act === "unstuck") { closeModal(); ACM.World.rescue(); toast("Back at the workshop.", "good"); logEvent("unstuck", {}); }
       else if (act === "controls") openControls();
       else if (act === "inv-hold") { equipOrUse(Number(el.dataset.i)); }
       else if (act === "provisions") openProvisions();
@@ -2102,6 +2227,6 @@ ACM.Game = (function () {
     addFriend,
     heldTool,
     requireHeld,
-    _t: { openHomesteadModal, invItems, reconcileSlots, selectSlot, invClickSlot, openInventoryModal, openControls, openNpcDialog, fellTree, growForest, acceptJob, switchActive, dropJob, sleepNow, openLumberRack, openTownBoard, handleTileAction, npcAction, rackAction }
+    _t: { maybeSquirrel, squirrelChance, plantCheck, openHomesteadModal, invItems, reconcileSlots, selectSlot, invClickSlot, openInventoryModal, openControls, openNpcDialog, fellTree, growForest, acceptJob, switchActive, dropJob, sleepNow, openLumberRack, openTownBoard, handleTileAction, npcAction, rackAction }
   };
 })();

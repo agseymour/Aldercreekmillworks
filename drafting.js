@@ -183,7 +183,7 @@ ACM.Drafting = (function () {
     const complexity = 1 + 0.03 * Math.min(10, sum.pieces);
     const planF = 0.5 + 0.5 * sum.score;
     const repeat = Math.pow(0.85, same) * Math.pow(0.6, builtBefore);
-    return Math.max(15, Math.round(c.base * complexity * planF * repeat));
+    return Math.max(12, Math.round(c.base * 0.8 * complexity * planF * repeat));
   }
 
   function projectFor(st, d) {

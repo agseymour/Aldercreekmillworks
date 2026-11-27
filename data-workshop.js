@@ -6,9 +6,9 @@ window.ACM = window.ACM || {};
  * Additions are bought at the Blueprint Desk. state.workshop = { west: bool, east: bool }.
  */
 ACM.WORKSHOP_ADDITIONS = [
-  { id: "west", name: "West Machine Bay", cost: 450, stars: 1.35, fits: ["table_saw", "jointer"],
+  { id: "west", name: "West Machine Bay", cost: 200, stars: 1.35, fits: ["table_saw", "jointer"],
     blurb: "Pours a concrete slab, runs 240 V power and adds a heavy-machine bay with room for the table saw and jointer." },
-  { id: "east", name: "East Machine Bay", cost: 650, stars: 2.0, needs: "west", fits: ["planer", "band_saw"],
+  { id: "east", name: "East Machine Bay", cost: 250, stars: 2.0, needs: "west", fits: ["planer", "band_saw"],
     blurb: "A second bay with a dust drop and wide infeed space, for the thickness planer and the band saw." }
 ];
 ACM.Workshop = (function () {

@@ -128,10 +128,12 @@ ACM.World = (function () {
     if (ACM.Audio) ACM.Audio.sfx("door");
   }
 
+  let hypoBlock = -1;            // a tile pretended to be blocked while we test whether planting there would trap someone
   function blockedTile(tx, ty) {
     if (scene) return sceneBlocked(tx, ty);
     if (!M.inb(tx, ty)) return true;
     const k = ty * W + tx;
+    if (k === hypoBlock) return true;
     if (M.tiles[k] === M.TYPE.WATER) return true;
     if (M.blocked[k] === 1 && !(felled[k] != null && M.natureIndex.has(k))) return true;
     return dyn[k] === 1 || treeAt.has(k);
@@ -198,6 +200,42 @@ ACM.World = (function () {
         }
       }
     }
+  }
+
+  /* ----------------------------------------------------------- trap check */
+  // How much ground can the player walk to from where they stand (tile centres they can really stand on)?
+  function reachable(limit) {
+    const seen = new Set(), q = [];
+    const sx = Math.floor(player.x / T), sy = Math.floor(player.y / T);
+    q.push([sx, sy]); seen.add(sy * W + sx);
+    while (q.length && seen.size < limit) {
+      const [x, y] = q.pop();
+      [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([dx, dy]) => {
+        const nx = x + dx, ny = y + dy, k = ny * W + nx;
+        if (!M.inb(nx, ny) || seen.has(k)) return;
+        if (!canStand(nx * T + 16, ny * T + 16)) return;
+        seen.add(k); q.push([nx, ny]);
+      });
+    }
+    return seen;
+  }
+  /** Would blocking this tile leave the player walled into a small pocket, or cut off from the workshop? */
+  function wouldTrap(tx, ty) {
+    if (scene) return false;
+    const spawnK = Math.floor(M.spawn.y / T) * W + Math.floor(M.spawn.x / T), LIM = 3000;
+    const before = reachable(LIM);
+    hypoBlock = ty * W + tx;
+    let after;
+    try { after = reachable(LIM); } finally { hypoBlock = -1; }
+    if (after.size >= LIM) return false;                    // still plenty of room
+    if (before.has(spawnK) && !after.has(spawnK)) return true;
+    return before.size >= 150 && after.size < 150;          // squeezed into a small pocket
+  }
+  /** emergency exit: put the player back at the workshop */
+  function rescue() {
+    if (scene) exitBuilding();
+    player.x = M.spawn.x; player.y = M.spawn.y; player.path = []; cancelWalk();
+    unstickIfNeeded();
   }
 
   /* ----------------------------------------------------------- A* */
@@ -368,6 +406,7 @@ ACM.World = (function () {
       }
       if (phase !== n.phase) {
         n.phase = phase;
+        n.mode = "idle"; n.legs = []; n.inside = false; n.timer = 120 + Math.floor(Math.random() * 200);
         if (phase === "night") { n.hidden = true; n.path = []; }
         else if (n.hidden) placeNpc(n, n.posts[phase]);
         else {
@@ -377,11 +416,33 @@ ACM.World = (function () {
         }
       }
       n.walking = false;
+      if (phase === "night") { n.mode = "idle"; n.inside = false; return; }
       const wi = ACM.INTERIORS ? Object.values(ACM.INTERIORS).find((d) => d.owner === n.id) : null;
-      const atWork = !!(wi && shopOpen(wi, state.timeMin));
-      if (atWork) { n.hidden = true; n.hiddenWork = true; n.path = []; return; }
-      if (n.hiddenWork) { n.hiddenWork = false; if (phase !== "night") placeNpc(n, n.posts[phase] || n.posts.day); return; }
+      const open = !!(wi && shopOpen(wi, state.timeMin));
+      const base = n.posts[phase] || n.posts.day;
+      if (!n.mode) { n.mode = "idle"; n.timer = 60 + Math.floor(Math.random() * 200); }
+      // shop owners slip inside while the shop is open, then come back out
+      if (n.mode === "inside") {
+        if (!open || --n.timer <= 0) { n.inside = false; placeNpc(n, base); n.mode = "idle"; n.timer = 90 + Math.floor(Math.random() * 160); }
+        return;
+      }
+      if (n.hidden) placeNpc(n, base);
+      if (n.mode === "idle") {
+        if (n.path.length) { /* still walking to a new post */ }
+        else if (--n.timer <= 0) planRoute(n, base);
+      }
+      if (n.mode === "route" && !n.path.length) {
+        if (n.legs.length) {
+          const g = n.legs.shift(), path = findPath(n.tx, n.ty, g.tx, g.ty);
+          if (path) n.path = path;
+        } else if (open && wi && Math.random() < 0.7) {
+          n.mode = "inside"; n.inside = true; n.hidden = true; n.timer = 900 + Math.floor(Math.random() * 1500);
+          return;
+        } else { n.mode = "idle"; n.timer = 160 + Math.floor(Math.random() * 360); }
+      }
       if (n.path.length) {
+        // wait if the player is right next to this villager, so nobody gets shoved or blocked
+        if (Math.hypot(player.x - n.px, player.y - n.py) < 30 && n.mode !== "idle") return;
         const wp = n.path[0];
         const gx = wp.tx * T + 16, gy = wp.ty * T + 24;
         const dx = gx - n.px, dy = gy - n.py, d = Math.hypot(dx, dy), sp = 1.1;
@@ -392,6 +453,22 @@ ACM.World = (function () {
         }
       }
     });
+  }
+
+  // A villager's routine: a loop of 3 or 4 stops on walkable ground within their radius of home (their shop or house), then back.
+  function planRoute(n, base) {
+    const R = n.def.radius || 14;
+    const tries = [];
+    for (let i = 0; i < 40 && tries.length < (3 + Math.floor(Math.random() * 2)); i++) {
+      const a = Math.random() * Math.PI * 2, r = 4 + Math.random() * (R - 4);
+      const tx = Math.round(base.tx + Math.cos(a) * r), ty = Math.round(base.ty + Math.sin(a) * r * 0.75);
+      const w = M.inb(tx, ty) ? nearestWalkable(tx, ty, 2) : null;
+      if (w && M.tiles[w.ty * W + w.tx] !== M.TYPE.WATER) tries.push({ tx: w.tx, ty: w.ty, a });
+    }
+    if (!tries.length) { n.mode = "idle"; n.timer = 200; return; }
+    tries.sort((p, q) => p.a - q.a);                       // go round in a loop instead of zig-zagging
+    n.legs = tries.concat([{ tx: base.tx, ty: base.ty }]);
+    n.mode = "route";
   }
 
   /* ----------------------------------------------------------- effects */
@@ -410,12 +487,19 @@ ACM.World = (function () {
     return { x: w.tx * T + 16, y: w.ty * T + 16, vx: 0, vy: 0, hopZ: 0, hopV: 0, timer: 40 + i * 30, dir: 1 };
   });
 
-  const birds = Array.from({ length: 5 }, (_, i) => ({
-    x: 120 + i * 170,
-    y: 60 + (i % 3) * 45,
-    speed: 1.1 + (i % 3) * 0.35,
-    wingPhase: i * 1.4
-  }));
+  // Songbirds follow looping routes around the map in world coordinates: they fly between waypoints and perch in trees for a while.
+  const birds = Array.from({ length: 24 }, (_, i) => {
+    const hx = 150 + Math.random() * (W * T - 300), hy = 150 + Math.random() * (H * T - 300), rad = 260 + Math.random() * 360;
+    const near = M.natureTrees.filter((t) => Math.hypot(t.tx * T - hx, t.ty * T - hy) < rad);
+    const route = [];
+    const n = 4 + Math.floor(Math.random() * 3);
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2 + Math.random() * 0.8, r = rad * (0.45 + Math.random() * 0.55);
+      if (near.length && k % 2 === 1) { const t = near[Math.floor(Math.random() * near.length)]; route.push({ x: t.tx * T + 16, y: t.ty * T - 36, perch: true }); }
+      else route.push({ x: Math.max(40, Math.min(W * T - 40, hx + Math.cos(a) * r)), y: Math.max(60, Math.min(H * T - 60, hy + Math.sin(a) * r * 0.7)), perch: false });
+    }
+    return { x: route[0].x, y: route[0].y, species: ACM.ArtCritters.NAMES[i % ACM.ArtCritters.NAMES.length], dir: 1, state: "fly", flap: Math.random() * 4, hop: 0, timer: 0, wi: 1 % route.length, speed: 0.9 + Math.random() * 0.7, route };
+  });
 
   const particles = Array.from({ length: 55 }, () => ({
     x: Math.random() * VIEW_W,
@@ -453,9 +537,18 @@ ACM.World = (function () {
     });
 
     birds.forEach((b) => {
-      b.x += b.speed;
-      b.wingPhase += 0.16;
-      if (b.x > VIEW_W + 20) { b.x = -20; b.y = 40 + Math.random() * 140; }
+      if (b.state === "perch") {
+        if (b.hop > 0) b.hop--; else if (Math.random() < 0.012) b.hop = 8;
+        if (--b.timer <= 0) { b.state = "fly"; b.wi = (b.wi + 1) % b.route.length; }
+        return;
+      }
+      const wp = b.route[b.wi], dx = wp.x - b.x, dy = wp.y - b.y, d = Math.hypot(dx, dy);
+      b.flap += 0.32;
+      if (d <= b.speed + 1) {
+        b.x = wp.x; b.y = wp.y;
+        if (wp.perch) { b.state = "perch"; b.timer = 160 + Math.floor(Math.random() * 420); b.hop = 0; }
+        else b.wi = (b.wi + 1) % b.route.length;
+      } else { b.x += (dx / d) * b.speed; b.y += (dy / d) * b.speed; b.dir = dx >= 0 ? 1 : -1; }
     });
 
     const weather = state.weather || "Sunny";
@@ -973,6 +1066,15 @@ ACM.World = (function () {
       if (cp) AW.drawSmoke(ctx, cp.x, cp.y, tick, 9);
     }
 
+    // chopping progress above trees being felled
+    if (state.chops) Object.keys(state.chops).forEach((ks) => {
+      const k = Number(ks), tx = k % W, ty = (k / W) | 0, ti = treeInfoAt(tx, ty);
+      if (!ti || tx * T < vx0 - 40 || tx * T > vx1 + 40 || ty * T < vy0 - 80 || ty * T > vy1 + 40) return;
+      const need = ({ pine: 6, cedar: 7, birch: 7, maple: 9, oak: 10, cherry: 9, walnut: 11 })[ti.type] || 7;
+      const f = Math.min(1, state.chops[k] / need), bx = tx * T + 2, by = ty * T - 30;
+      ctx.fillStyle = "rgba(20,12,6,0.8)"; ctx.fillRect(bx - 1, by - 1, 30, 7);
+      ctx.fillStyle = "#e8b84a"; ctx.fillRect(bx, by, Math.round(28 * f), 5);
+    });
     bursts.forEach((b) => { ctx.fillStyle = b.col; ctx.fillRect(Math.round(b.x), Math.round(b.y), b.s, b.s); });
     if (activeStation) AW.drawStationMarker(ctx, activeStation, tick);
     ctx.restore();
@@ -1006,7 +1108,7 @@ ACM.World = (function () {
       ctx.restore();
     }
 
-    AW.drawOverlay(ctx, state, particles, birds, player, M.stations, VIEW_W, VIEW_H, plantLabel);
+    AW.drawOverlay(ctx, state, particles, birds, player, M.stations, VIEW_W, VIEW_H, plantLabel, { x: camera.x * WZ, y: camera.y * WZ, wz: WZ });
     if (fade > 0) { ctx.fillStyle = "rgba(0,0,0," + fade + ")"; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
   }
 
@@ -1021,6 +1123,8 @@ ACM.World = (function () {
     focusGameCanvas,
     getPlayerTile: playerTile,
     treeInfoAt,
+    wouldTrap,
+    rescue,
     spawnBurst,
     getNpcs: () => npcs,
     enterBuilding,
@@ -1037,7 +1141,8 @@ ACM.World = (function () {
       walkTo,
       teleportTile(tx, ty) { player.x = tx * T + 16; player.y = ty * T + 16; cancelWalk(); },
       canStand,
-      refresh: refreshDynamic
+      refresh: refreshDynamic,
+      birds
     }
   };
 })();

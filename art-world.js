@@ -779,8 +779,12 @@ ACM.ArtWorld = (function () {
   }
 
   /* ------------------------------------------------------------------ screen-space overlay */
-  function drawOverlay(ctx, state, particles, birds, player, stations, VIEW_W, VIEW_H, plantInfo) {
-    particles.forEach((p) => {
+  function drawOverlay(ctx, state, particles, birds, player, stations, VIEW_W, VIEW_H, plantInfo, cam) {
+    cam = cam || { x: 0, y: 0, wz: 1 };
+    const wrap = (v, m) => ((v % m) + m) % m;
+    particles.forEach((q) => {
+      // weather lives in the world: it scrolls with the ground instead of sticking to the screen
+      const p = { kind: q.kind, x: wrap(q.x - cam.x, VIEW_W), y: wrap(q.y - cam.y, VIEW_H) };
       if (p.kind === "rain") {
         ctx.strokeStyle = "rgba(186, 230, 253, 0.65)";
         ctx.lineWidth = 1.5;
@@ -796,16 +800,14 @@ ACM.ArtWorld = (function () {
         ctx.fillRect(p.x, p.y, 6, 4);
       }
     });
-    birds.forEach((b) => {
-      const wingY = Math.sin(b.wingPhase) * 4;
-      ctx.strokeStyle = "#1e293b";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(b.x - 6, b.y + wingY);
-      ctx.lineTo(b.x, b.y);
-      ctx.lineTo(b.x + 6, b.y + wingY);
-      ctx.stroke();
-    });
+    const tm = state.timeMin == null ? 480 : state.timeMin;
+    if (tm >= 360 && tm < 1170 && state.weather !== "Rain" && state.weather !== "Snow" && ACM.ArtCritters) {
+      birds.forEach((b) => {
+        const bx = b.x * cam.wz - cam.x, by = b.y * cam.wz - cam.y;
+        if (bx < -30 || bx > VIEW_W + 30 || by < -30 || by > VIEW_H + 30) return;
+        ACM.ArtCritters.drawBird(ctx, b, bx, by);
+      });
+    }
 
     // minimap
     const mw = 144, mh = 96, mx = VIEW_W - mw - 10, my = 10;

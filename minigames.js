@@ -28,7 +28,7 @@ ACM.Minigames = (function () {
             : `<span class="tag">Certified up to Tier ${game.state.certifiedTier}★</span>`
         }
       </div>
-      <p class="item-meta">New curriculum questions remaining at your level: <strong>${unanswered.length}</strong> (Reviewing answered questions pays $10).</p>
+      <p class="item-meta">New curriculum questions remaining at your level: <strong>${unanswered.length}</strong> (Reviewing answered questions pays $5, up to 5 a day).</p>
       <div id="quiz-stage"></div>
     `;
 
@@ -88,11 +88,18 @@ ACM.Minigames = (function () {
         const fb = document.getElementById("q-feedback");
         if (correct) {
           ACM.Game.playTone(660, 0.14);
-          const payout = isNew ? 25 : 10;
+          // new questions pay $25 once; reviewing pays $5 for the first 5 correct answers each game day, then nothing
+          let payout = 25;
+          if (!isNew) {
+            const s = game.state;
+            if (!s.reviewPaid || s.reviewPaid.day !== s.dayCount) s.reviewPaid = { day: s.dayCount, n: 0 };
+            payout = s.reviewPaid.n < 5 ? 5 : 0;
+            if (payout) s.reviewPaid.n++;
+          }
           game.state.cash += payout;
           if (isNew) game.state.answeredQuestions.push(q.id);
           game.updateHUD();
-          fb.innerHTML = `<p style="color:#15803d; font-weight:bold;">Correct! +$${payout} earned.</p><p class="item-meta">${q.explanation}</p>`;
+          fb.innerHTML = `<p style="color:#15803d; font-weight:bold;">Correct!${payout ? " +$" + payout + " earned." : " (Today's paid practice is used up, but the review still counts.)"}</p><p class="item-meta">${q.explanation}</p>`;
         } else {
           ACM.Game.playTone(220, 0.2);
           fb.innerHTML = `<p style="color:#b91c1c; font-weight:bold;">Not quite — review the shop rule below:</p><p class="item-meta">${q.explanation}</p>`;

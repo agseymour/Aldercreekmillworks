@@ -671,10 +671,30 @@ table.shop-table th {
 .inv-grid { display: grid; grid-template-columns: repeat(12, 48px); gap: 3px; justify-content: center; padding: 8px; background: #2a1c10; border-radius: 8px; }
 .inv-grid .slot { width: 48px; height: 48px; }
 .inv-grid .slot canvas { width: 40px; height: 40px; }
-.inv-info { margin-top: 8px; padding: 8px 12px; background: #3b2a12; color: #ffe9b0; border-radius: 6px; min-height: 64px; }
+.inv-info { margin-top: 8px; padding: 8px 12px; background: #3b2a12; color: #ffe9b0; border-radius: 6px; height: 132px; overflow-y: auto; box-sizing: border-box; }
+#blackout { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 400; transition: opacity 1s ease; display: flex; align-items: center; justify-content: center; color: #d9c08a; font-size: 1.3rem; text-align: center; padding: 20px; }
+#blackout.on { opacity: 1; pointer-events: auto; }
 .inv-info strong { color: #f0be59; }
 .inv-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
 .inv-tabs button.active { background: #f0be59; color: #241509; }
 .keycap { display: inline-block; min-width: 22px; padding: 1px 6px; margin: 0 2px; border: 2px solid #8a5c3c; border-bottom-width: 4px; border-radius: 5px; background: #f6ecd0; font: bold 12px "Trebuchet MS", sans-serif; text-align: center; }
 .ctl-table td { padding: 5px 8px; vertical-align: middle; }
 @media (max-width: 760px) { .inv-grid { grid-template-columns: repeat(6, 48px); } .slot { width: 36px; height: 36px; } .slot canvas { width: 28px; height: 28px; } }
+
+/* fraction calculator */
+#calc-toggle { display: none; position: fixed; right: 14px; bottom: 14px; z-index: 210; background: #e8b84a; color: #2b1d10; border: 2px solid #6b4423; border-radius: 8px; padding: 8px 12px; font-weight: 700; cursor: pointer; }
+#calc-toggle.show { display: block; }
+#calc-panel { display: none; position: fixed; right: 14px; bottom: 62px; z-index: 210; width: 250px; background: #3b2a12; color: #ffe9b0; border: 2px solid #d49b35; border-radius: 10px; padding: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.6); }
+#calc-panel.open { display: block; }
+#calc-panel .calc-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+#calc-panel .calc-x { background: transparent; border: 0; color: #ffe9b0; font-size: 20px; cursor: pointer; }
+#calc-panel .calc-screen { background: #14100a; border-radius: 6px; padding: 6px 8px; text-align: right; min-height: 74px; }
+#calc-panel .calc-expr { font-size: 12px; color: #b9a47a; min-height: 16px; overflow: hidden; white-space: nowrap; }
+#calc-panel .calc-main { font-size: 26px; font-weight: 700; color: #fff3b8; min-height: 34px; overflow: hidden; white-space: nowrap; }
+#calc-panel .calc-dec { font-size: 12px; color: #9fd1a6; min-height: 16px; }
+#calc-panel .calc-keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 8px; }
+#calc-panel .calc-keys button { padding: 9px 0; font-size: 18px; border-radius: 6px; border: 1px solid #6b4423; background: #5a3d24; color: #ffe9b0; cursor: pointer; }
+#calc-panel .calc-keys button.op { background: #8a5a2c; }
+#calc-panel .calc-keys button.wide { grid-column: span 4; font-size: 14px; }
+#calc-panel .calc-keys button:hover { filter: brightness(1.2); }
+#calc-panel .calc-help { font-size: 11px; color: #b9a47a; margin: 8px 0 0; }

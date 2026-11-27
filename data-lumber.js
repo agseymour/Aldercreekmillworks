@@ -227,14 +227,14 @@ ACM.SAPLINGS = [
 
 // Logs from felled trees. Sell them, pay Routledge to mill them, or mill them yourself once you own the machines.
 ACM.LOGS = {
-  pine:   { name: "Pine",   lumberId: "pine_s4s",         needs: ["band_saw", "jointer", "planer"], sell: 4,  yieldFell: 3 },
-  cedar:  { name: "Cedar",  lumberId: "cedar_s4s",        needs: ["band_saw", "jointer", "planer"], sell: 7,  yieldFell: 3 },
-  birch:  { name: "Birch",  lumberId: "birch_rough",      needs: ["band_saw"],                      sell: 6,  yieldFell: 3 },
-  oak:    { name: "Oak",    lumberId: "white_oak_rough",  needs: ["band_saw"],                      sell: 11, yieldFell: 4 },
-  maple:  { name: "Maple",  lumberId: "hard_maple_rough", needs: ["band_saw"],                      sell: 10, yieldFell: 4 },
-  cherry: { name: "Cherry", lumberId: "cherry_rough",     needs: ["band_saw"],                      sell: 12, yieldFell: 4 },
-  walnut: { name: "Walnut", lumberId: "walnut_rough",     needs: ["band_saw"],                      sell: 16, yieldFell: 5 }
+  pine:   { name: "Pine",   lumberId: "pine_s4s",         needs: ["band_saw", "jointer", "planer"], sell: 3,  yieldFell: 3 },
+  cedar:  { name: "Cedar",  lumberId: "cedar_s4s",        needs: ["band_saw", "jointer", "planer"], sell: 5,  yieldFell: 3 },
+  birch:  { name: "Birch",  lumberId: "birch_rough",      needs: ["band_saw"],                      sell: 4,  yieldFell: 3 },
+  oak:    { name: "Oak",    lumberId: "white_oak_rough",  needs: ["band_saw"],                      sell: 8, yieldFell: 4 },
+  maple:  { name: "Maple",  lumberId: "hard_maple_rough", needs: ["band_saw"],                      sell: 7, yieldFell: 4 },
+  cherry: { name: "Cherry", lumberId: "cherry_rough",     needs: ["band_saw"],                      sell: 8, yieldFell: 4 },
+  walnut: { name: "Walnut", lumberId: "walnut_rough",     needs: ["band_saw"],                      sell: 11, yieldFell: 5 }
 };
 ACM.LOG_BOARDS = 2;          // 1 log -> 2 bd ft of lumber
-ACM.LOG_MILL_FEE = 3;        // Routledge's service fee per log
-ACM.LUMBER_SELL_RATIO = 0.6; // lumber sells for 60% of its buying price
+ACM.LOG_MILL_FEE = 6;        // Routledge's service fee per log
+ACM.LUMBER_SELL_RATIO = 0.35; // lumber sells for 35% of its buying price
