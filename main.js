@@ -915,21 +915,24 @@ ACM.Game = (function () {
       if (st) handleStationInteract.call(ACM.Game, st.id);
     };
 
-    function loop() {
-      ACM.World.update(state);
-      ACM.World.render(ctx, state);
+  function loop() {
+      try {
+        ACM.World.update(state);
+        ACM.World.render(ctx, state);
 
-      const st = ACM.World.getActiveStation();
-      if (st) {
-        hintEl.textContent = st.prompt;
-        interactBtn.disabled = false;
-        interactBtn.textContent = `Open ${st.shortLabel} [E]`;
-      } else {
-        hintEl.textContent = "Walk with WASD / Arrow Keys, use the D-Pad, or click anywhere to move.";
-        interactBtn.disabled = true;
-        interactBtn.textContent = "Walk to a Building";
+        const st = ACM.World.getActiveStation();
+        if (st) {
+          hintEl.textContent = st.prompt;
+          interactBtn.disabled = false;
+          interactBtn.textContent = `Open ${st.shortLabel} [E]`;
+        } else {
+          hintEl.textContent = "Walk with WASD / Arrow Keys, use the D-Pad, or click anywhere to move.";
+          interactBtn.disabled = true;
+          interactBtn.textContent = "Walk to a Building";
+        }
+      } catch (err) {
+        console.error("Frame render error:", err);
       }
-
       requestAnimationFrame(loop);
     }
 
