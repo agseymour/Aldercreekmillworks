@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Alder Creek Millworks — Production Tech 11 & 12</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=4" />
 </head>
 <body>
   <div id="app-shell">
@@ -12,16 +12,16 @@
     <header id="top-hud">
       <div class="hud-group">
         <span class="badge badge-wood" id="hud-shop-name">Alder Creek Shop</span>
-        <span class="badge badge-act" id="hud-act">Act I: Sweeping Out the Sawdust</span>
+        <span class="badge badge-season" id="hud-season">Spring • Day 1 • Sunny</span>
       </div>
       <div class="hud-group">
         <div class="hud-stat" title="Shop Reputation Rating">
           <span class="stat-label">Rating</span>
-          <span class="stat-val" id="hud-stars">★ 1.0</span>
+          <span class="stat-val" id="hud-stars">★ 1.00</span>
         </div>
         <div class="hud-stat" title="Available Business Cash">
           <span class="stat-label">Cash</span>
-          <span class="stat-val cash-val" id="hud-cash">$120</span>
+          <span class="stat-val cash-val" id="hud-cash">$110</span>
         </div>
         <div class="hud-stat" title="Sawdust Fire Hazard Level">
           <span class="stat-label">Sawdust</span>
@@ -29,12 +29,12 @@
         </div>
         <div class="hud-stat" title="Active Customer Commission">
           <span class="stat-label">Active Job</span>
-          <span class="stat-val" id="hud-job">None</span>
+          <span class="stat-val" id="hud-job">Songbird House</span>
         </div>
       </div>
       <div class="hud-group hud-actions">
-        <button class="btn-wood btn-sm" id="btn-story">Story & Jobs</button>
-        <button class="btn-wood btn-sm" id="btn-inventory">Shop Inventory</button>
+        <button class="btn-wood btn-sm" id="btn-story">Commissions</button>
+        <button class="btn-wood btn-sm" id="btn-inventory">Inventory</button>
         <button class="btn-wood btn-sm" id="btn-leaderboard">Leaderboard</button>
         <button class="btn-brass btn-sm" id="btn-save">Save</button>
       </div>
@@ -46,8 +46,8 @@
 
       <!-- Bottom Interaction Prompt -->
       <div id="interaction-banner">
-        <span id="station-hint">Walk with WASD / Arrow Keys or click any station in the workshop.</span>
-        <button class="btn-brass" id="btn-interact" disabled>Open Station [E]</button>
+        <span id="station-hint">Walk with WASD / Arrow Keys or click anywhere to explore Alder Creek.</span>
+        <button class="btn-brass" id="btn-interact" disabled>Walk to a Building</button>
       </div>
     </main>
 
@@ -143,17 +143,16 @@
     </div>
   </div>
 
-<!-- Modular Scripts in Dependency Order (v2 cache-busted) -->
-  <script src="data-tools.js?v=2"></script>
-  <script src="data-lumber.js?v=2"></script>
-  <script src="data-projects.js?v=2"></script>
-  <script src="data-questions.js?v=2"></script>
-  <script src="art-sprites.js?v=2"></script>
-  <script src="art-diagrams.js?v=2"></script>
-  <script src="minigames.js?v=2"></script>
-  <script src="world.js?v=2"></script>
-  <script src="cloud-sync.js?v=3"></script>
-  <script src="main.js?v=3"></script>
+  <!-- Modular Scripts in Dependency Order -->
+  <script src="data-tools.js?v=4"></script>
+  <script src="data-lumber.js?v=4"></script>
+  <script src="data-projects.js?v=4"></script>
+  <script src="data-questions.js?v=4"></script>
+  <script src="art-sprites.js?v=4"></script>
+  <script src="art-diagrams.js?v=4"></script>
+  <script src="minigames.js?v=4"></script>
+  <script src="world.js?v=4"></script>
+  <script src="cloud-sync.js?v=4"></script>
+  <script src="main.js?v=4"></script>
 </body>
 </html>
-
