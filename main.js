@@ -283,18 +283,15 @@ ACM.Game = (function () {
         </div>
         <button class="btn-wood btn-sm" id="btn-sweep-shop">Sweep Workshop Sawdust (Free)</button>
       </div>
-      <div class="card-grid">
     `;
 
-    ACM.TOOLS.forEach((tool) => {
+    const card = (tool) => {
       const owned = state.ownedTools.includes(tool.id);
-      const lockedByTier = tool.tier > state.certifiedTier;
       const fit = ACM.Workshop ? ACM.Workshop.fits(state, tool.id) : { ok: true };
       const dur = state.toolDurability[tool.id] ?? tool.maxDurability;
       const needsSharpen = owned && tool.maxDurability < 500 && dur < tool.maxDurability;
-
-      html += `
-        <div class="item-card ${owned ? "owned" : lockedByTier ? "locked" : ""}">
+      return `
+        <div class="item-card ${owned ? "owned" : ""}">
           <div>
             <div class="item-title">${tool.name}</div>
             <span class="tag">Tier ${tool.tier}★</span> <span class="tag">${tool.category.toUpperCase()}</span>
@@ -302,23 +299,27 @@ ACM.Game = (function () {
             <p class="item-meta" style="color:#78350f; margin-top:3px;"><em>${tool.curriculumNote}</em></p>
           </div>
           <div>
-            ${
-              owned
-                ? needsSharpen
-                  ? `<button class="btn-brass btn-sm sharpen-btn" data-tid="${tool.id}">Sharpen Blade ($${tool.sharpenCost}) [${dur}/${tool.maxDurability}]</button>`
-                  : `<span class="tag" style="background:#bbf7d0;">Owned & Ready</span>`
-                : lockedByTier
-                ? `<span class="tag">Requires Tier ${tool.tier}★ Exam</span>`
-                : !fit.ok
-                ? `<span class="tag" style="background:#fde68a;">No room: build the ${fit.add.name} ($${fit.add.cost}) at the Blueprint Desk first</span>`
-                : `<button class="btn-brass btn-sm buy-tool-btn" data-tid="${tool.id}">Buy ($${tool.price})</button>`
-            }
+            ${owned
+              ? needsSharpen
+                ? `<button class="btn-brass btn-sm sharpen-btn" data-tid="${tool.id}">Sharpen Blade ($${tool.sharpenCost}) [${dur}/${tool.maxDurability}]</button>`
+                : `<span class="tag" style="background:#bbf7d0;">Owned & Ready</span>`
+              : !fit.ok
+              ? `<span class="tag" style="background:#fde68a;">No room: build the ${fit.add.name} ($${fit.add.cost}) at the Blueprint Desk first</span>`
+              : `<button class="btn-brass btn-sm buy-tool-btn" data-tid="${tool.id}">Buy ($${tool.price})</button>`}
           </div>
-        </div>
-      `;
-    });
-
-    html += `</div>`;
+        </div>`;
+    };
+    const forSale = ACM.TOOLS.filter((t) => !state.ownedTools.includes(t.id) && t.tier <= state.certifiedTier);
+    const mine = ACM.TOOLS.filter((t) => state.ownedTools.includes(t.id));
+    const nextTier = ACM.TOOLS.filter((t) => t.tier === state.certifiedTier + 1 && !state.ownedTools.includes(t.id));
+    const teaser = nextTier.length
+      ? `<p class="item-meta">Pass the Tier ${state.certifiedTier + 1}★ exam and Seymour will stock ${nextTier.length} more tool${nextTier.length > 1 ? "s" : ""}.</p><div class="card-grid">${nextTier.map((t) => ACM.Reveal.locked(t.name, `Requires the Tier ${t.tier}★ exam.`)).join("")}</div>`
+      : "";
+    html += ACM.Reveal.tabs([
+      { key: "sale", label: "For sale", count: forSale.length, html: forSale.length ? `<div class="card-grid">${forSale.map(card).join("")}</div>` : `<p class="item-meta">You have everything Seymour stocks at your level.</p>` },
+      { key: "mine", label: "Your tools", count: mine.length, html: mine.length ? `<div class="card-grid">${mine.map(card).join("")}</div>` : `<p class="item-meta">No tools yet.</p>` },
+      { key: "next", label: "Next tier", html: teaser }
+    ]);
     openModal("Seymour's Hardware & Tool Shop", html);
 
     document.getElementById("btn-sweep-shop").onclick = () => {
@@ -786,12 +787,12 @@ ACM.Game = (function () {
     tutDone("fell");
     updateHUD();
     renderPlantBar();
-    maybeSquirrel();
+    maybeSquirrel(tx, ty);
   }
 
   // A rare surprise: a giant squirrel lives in some hollow trunks. The more trees you fell in one day, the likelier it is.
   function squirrelChance(n) { return Math.min(0.4, 0.02 + 0.015 * (n - 1)); }
-  function maybeSquirrel() {
+  function maybeSquirrel(tx, ty) {
     if (!state.feltToday || state.feltToday.day !== state.dayCount) state.feltToday = { day: state.dayCount, n: 0 };
     state.feltToday.n++;
     const n = state.feltToday.n;
@@ -807,12 +808,14 @@ ACM.Game = (function () {
       if (ACM.Audio) ACM.Audio.sfx("bad");
       document.getElementById("sq-run").onclick = () => {
         closeModal();
-        collapseAtMidnight({
+        const caught = () => collapseAtMidnight({
           noLoss: true, event: "squirrel_day_end", title: "Chased home",
           html: `<p><strong>The giant squirrel chased you all the way home!</strong></p>
-            <p class="item-meta">You hid in the workshop until dark, bruised and out of breath. The day is over. Felling lots of trees in a single day makes it more likely that you'll disturb something living in them.</p>
+            <p class="item-meta">It caught up, and you hid in the workshop until dark, bruised and out of breath. The day is over. Felling lots of trees in a single day makes it more likely that you'll disturb something living in them.</p>
             <div class="dialog-actions"><button class="btn-wood" data-act="close">OK</button></div>`
         });
+        if (ACM.World.startChase && tx != null) { toast("RUN! The squirrel is right behind you!", "bad"); ACM.World.startChase(tx, ty, caught); }
+        else caught();
       };
     }, 700);
     return true;
@@ -1050,7 +1053,7 @@ ACM.Game = (function () {
           <div class="item-title">${p.title}</div>
           <div class="item-meta">Client: ${p.client} | Pays: <strong>$${doneCount && !p.design ? Math.max(1, Math.round(p.basePay * Math.max(0.1, Math.pow(0.5, doneCount)))) + " (repeat order)" : p.basePay}</strong> | +${p.starGain}★ | Tier ${p.tier}</div>
           <p class="item-meta" style="margin-top:4px;">${p.desc}</p>
-          <p class="item-meta" style="margin-top:4px;"><strong>Stock:</strong> ${p.lumberReq.units} units (${p.lumberReq.allowedIds.map((id) => (lumberDef(id) || {}).name || id).join(" / ")})</p>
+          <p class="item-meta" style="margin-top:4px;"><strong>Stock:</strong> ${p.lumberReq.units} units (${p.lumberReq.allowedIds.map((id) => (lumberDef(id) || {}).name || id).join(" / ")}, or boards you milled yourself)</p>
         </div>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px; gap:6px; flex-wrap:wrap;">
           ${doneCount > 0 ? `<span class="tag">Built ${doneCount}×</span>` : `<span></span>`}
@@ -1282,6 +1285,36 @@ ACM.Game = (function () {
     }
   }
 
+  /** Where should the player go next? Mirrors the objective bar. Returns { npc | station | bld | tree } or null. */
+  function goalTarget() {
+    if (state.guide === false || !state.tut) return null;
+    const done = state.tut.done || [];
+    const step = TUT.find((s) => !done.includes(s.id) && !(s.id === "forage" && state.season === "Winter"));
+    const j = getActiveProject(), pend = (state.products || [])[0];
+    const clientNpc = (pj) => { const n = ACM.NPCS.find((x) => pj && pj.client && pj.client.indexOf(x.clientKey) === 0); return n ? { npc: n.id } : null; };
+    const jobStation = () => {
+      const p = state.jobProgress || {};
+      return { station: (!p.lumberAssigned || (j.cuts && p.cutIndex < j.cuts.length)) ? "layout_bench" : "assembly_table" };
+    };
+    if (step) {
+      if (step.id === "meet_seymour") return { npc: "seymour" };
+      if (step.id === "meet_clara") return { npc: "clara" };
+      if (step.id === "fell") return { tree: true };
+      if (step.id === "rack") return { station: "lumber_rack" };
+      if (step.id === "first_delivery") {
+        if (pend && !j) return clientNpc(projectById(pend.pid)) || { station: "town_board" };
+        if (j) return jobStation();
+        return { station: "town_board" };
+      }
+      return null;
+    }
+    if (pend && !j) return clientNpc(projectById(pend.pid)) || { station: "town_board" };
+    if (j) return jobStation();
+    const so = ACM.Story && ACM.Story.objective(ACM.Game);
+    if (so) return { bld: "legacy" };
+    return { station: "town_board" };
+  }
+
   function openHowItWorks(intro) {
     openModal(intro ? "Welcome to Alder Creek" : "How Alder Creek works", `
       ${intro ? `<p style="line-height:1.55;">Your grandparents' house burned down years ago, but their workshop still stands. The village still remembers their craftsmanship. Rebuild the workshop's name one careful commission at a time, and maybe, one day, restore the old house and its kitchen. They say it still has a friendly visitor...</p>` : ""}
@@ -1476,6 +1509,7 @@ ACM.Game = (function () {
       <tr><td>${k("I")} ${k("Tab")}</td><td>Open the backpack: arrows move the cursor, ${k("Enter")} picks up and swaps items</td></tr>
       <tr><td>${k("Esc")}</td><td>Close any window</td></tr>
       <tr><td>${k("↑")}${k("↓")}${k("←")}${k("→")}</td><td>In menus: move between buttons and options, ${k("Enter")} chooses</td></tr>
+      <tr><td>${k("G")}</td><td>Show or hide the goal arrow that points to your next objective</td></tr>
       <tr><td>${k("H")} ${k("M")}</td><td>This help · mute or unmute sound</td></tr>
     </tbody></table>
     <p class="item-meta" style="margin-top:8px">Young trees can be dug up again: click one while holding your felling axe. Full-grown trees take several chops.</p>
@@ -1525,31 +1559,29 @@ ACM.Game = (function () {
     const currentStage = state.homeStage || 0;
     const nextSpec = ACM.HOME_STAGES.find((s) => s.stage === currentStage + 1);
 
-    let html = `
+    const banner = `
       <div class="npc-banner">
         <div>
-          <strong>Your Homestead Plot — Stage ${currentStage} / 5</strong>
+          <strong>Your Homestead Plot: Stage ${currentStage} / 5</strong>
           <p class="item-meta">Use your woodworking skills and milled lumber to build your own timber-frame home in Alder Creek.</p>
         </div>
         <button class="btn-wood btn-sm" id="btn-home-sleep">Rest Until Morning (+1 Day)</button>
-      </div>
-    `;
+      </div>`;
 
+    let nextHtml;
     if (!nextSpec) {
-      html += `
+      nextHtml = `
         <div class="item-card owned">
           <h3>Master Craftsman's Homestead Complete!</h3>
           <p>Your timber-frame house stands finished overlooking Alder Creek. All customer commissions automatically earn a <strong>+15% cash & reputation bonus</strong>!</p>
-        </div>
-      `;
+        </div>`;
     } else {
       const lumberObj = ACM.LUMBER.find((l) => l.id === nextSpec.lumberId);
       const toolObj = ACM.TOOLS.find((t) => t.id === nextSpec.requiredTool);
       const haveLumber = (state.lumberStock[nextSpec.lumberId] || 0) >= nextSpec.lumberUnits;
       const haveCash = state.cash >= nextSpec.cashCost;
       const haveTool = state.ownedTools.includes(nextSpec.requiredTool);
-
-      html += `
+      nextHtml = `
         <div class="item-card">
           <div class="item-title">Next Build Stage: ${nextSpec.name}</div>
           <p class="item-meta">${nextSpec.desc}</p>
@@ -1561,22 +1593,21 @@ ACM.Game = (function () {
           <button class="btn-brass" id="btn-build-home" ${haveLumber && haveCash && haveTool ? "" : "disabled"}>
             Construct Stage ${nextSpec.stage}: ${nextSpec.name}
           </button>
-        </div>
-      `;
+        </div>`;
     }
 
-    html += `<div class="card-grid" style="margin-top:12px;">`;
-    ACM.HOME_STAGES.forEach((st) => {
-      const built = currentStage >= st.stage;
-      html += `
-        <div class="item-card ${built ? "owned" : ""}">
-          <div class="item-title">Stage ${st.stage}: ${st.name}</div>
-          <span class="tag">${built ? "Built ✓" : "Upcoming"}</span>
-          <p class="item-meta">${st.desc}</p>
-        </div>
-      `;
-    });
-    html += `</div>`;
+    // only the next step is shown in full; finished stages sit in a tab; later stages stay hidden until they matter
+    const built = ACM.HOME_STAGES.filter((st) => currentStage >= st.stage);
+    const later = ACM.HOME_STAGES.filter((st) => st.stage > currentStage + 1);
+    const laterHtml = later.length ? `<div class="card-grid">${later.map((st, i) => (i === 0
+      ? ACM.Reveal.locked(`Stage ${st.stage}: ${st.name}`, `Unlocks once you finish Stage ${st.stage - 1}.`)
+      : ACM.Reveal.locked(`Stage ${st.stage}: ???`, "Keep building to find out."))).join("")}</div>` : "";
+    const builtHtml = built.length ? `<div class="card-grid">${built.map((st) => `<div class="item-card owned"><div class="item-title">Stage ${st.stage}: ${st.name}</div><span class="tag">Built ✓</span><p class="item-meta">${st.desc}</p></div>`).join("")}</div>` : "";
+    const html = banner + ACM.Reveal.tabs([
+      { key: "next", label: nextSpec ? "Next step" : "Finished", html: nextHtml },
+      { key: "built", label: "Built", count: built.length || null, html: builtHtml },
+      { key: "later", label: "Coming up", count: later.length || null, html: laterHtml }
+    ]);
 
     openModal("Your Homestead & Home Builder", html);
 
@@ -2104,6 +2135,7 @@ ACM.Game = (function () {
       else if (lk === "f") useSelected();
       else if (lk === "i" || k === "Tab") { e.preventDefault(); openInventoryModal("items"); }
       else if (lk === "h") openControls();
+      else if (lk === "g") { state.guide = state.guide === false; toast(state.guide === false ? "Goal guide off (press G to turn it on)" : "Goal guide on", "good"); }
       else if (lk === "m") { ACM.Audio.init(); ACM.Audio.setMuted(!ACM.Audio.isMuted()); updateHUD(); }
     });
 
@@ -2165,11 +2197,18 @@ ACM.Game = (function () {
       if (st) handleStationInteract.call(ACM.Game, st.id);
     };
 
-  let frameN = 0;
-  function loop() {
+  let frameN = 0, lastT = 0, acc = 16;
+  const STEP = 1000 / 60;
+  function loop(now) {
       try {
         if ((frameN = (frameN || 0) + 1) % 30 === 0) updateObjective();
-        ACM.World.update(state);
+        // the game logic runs at a fixed 60 steps a second, so a 120 or 144 Hz screen doesn't make everything faster
+        now = now || performance.now();
+        acc += Math.min(100, lastT ? now - lastT : STEP);
+        lastT = now;
+        let steps = 0;
+        while (acc >= STEP - 0.5 && steps < 4) { ACM.World.update(state); acc -= STEP; steps++; }
+        if (acc > STEP * 4) acc = 0;
         ACM.World.render(ctx, state);
 
         const st = ACM.World.getActiveStation();
@@ -2227,6 +2266,7 @@ ACM.Game = (function () {
     addFriend,
     heldTool,
     requireHeld,
+    goalTarget,
     _t: { maybeSquirrel, squirrelChance, plantCheck, openHomesteadModal, invItems, reconcileSlots, selectSlot, invClickSlot, openInventoryModal, openControls, openNpcDialog, fellTree, growForest, acceptJob, switchActive, dropJob, sleepNow, openLumberRack, openTownBoard, handleTileAction, npcAction, rackAction }
   };
 })();

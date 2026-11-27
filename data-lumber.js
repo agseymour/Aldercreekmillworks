@@ -235,6 +235,13 @@ ACM.LOGS = {
   cherry: { name: "Cherry", lumberId: "cherry_rough",     needs: ["band_saw"],                      sell: 8, yieldFell: 4 },
   walnut: { name: "Walnut", lumberId: "walnut_rough",     needs: ["band_saw"],                      sell: 11, yieldFell: 5 }
 };
+/** Boards you mill yourself are always accepted by the shop: any species from your own trees works for any commission
+ *  (the job's "preferred" wood still earns the quality bonus). Jobs list the store-bought stock they were written for. */
+ACM.lumberAllowed = function (job, id) {
+  if (!job || !job.lumberReq) return false;
+  if (job.lumberReq.allowedIds.includes(id)) return true;
+  return Object.keys(ACM.LOGS || {}).some((k) => ACM.LOGS[k].lumberId === id);
+};
 ACM.LOG_BOARDS = 2;          // 1 log -> 2 bd ft of lumber
 ACM.LOG_MILL_FEE = 6;        // Routledge's service fee per log
 ACM.LUMBER_SELL_RATIO = 0.35; // lumber sells for 35% of its buying price

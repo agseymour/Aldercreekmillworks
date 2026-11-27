@@ -779,7 +779,32 @@ ACM.ArtWorld = (function () {
   }
 
   /* ------------------------------------------------------------------ screen-space overlay */
-  function drawOverlay(ctx, state, particles, birds, player, stations, VIEW_W, VIEW_H, plantInfo, cam) {
+  /** a bouncing, glowing arrow over the goal; when it is off screen, a pointer on the screen edge shows the way */
+  function drawGoalArrow(ctx, goal, cam, VIEW_W, VIEW_H, player) {
+    const t = Date.now() / 1000, sx = goal.x * cam.wz - cam.x, sy = goal.y * cam.wz - cam.y;
+    const pulse = 0.5 + 0.5 * Math.sin(t * 5);
+    const shape = (x, y, rot, s) => {
+      ctx.save(); ctx.translate(Math.round(x), Math.round(y)); ctx.rotate(rot);
+      const g = ctx.createRadialGradient(0, 0, 2, 0, 0, 34 * s);
+      g.addColorStop(0, "rgba(255,224,110," + (0.55 + 0.3 * pulse) + ")"); g.addColorStop(1, "rgba(255,224,110,0)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 34 * s, 0, Math.PI * 2); ctx.fill();
+      // pixel-style down arrow: shaft + head, dark outline, gold fill
+      const P = (c, px, py, w, h) => { ctx.fillStyle = c; ctx.fillRect(px * 3 * s, py * 3 * s, w * 3 * s, h * 3 * s); };
+      P("#3b2410", -3, -5, 6, 5); P("#3b2410", -5, -1, 10, 3); P("#3b2410", -3, 2, 6, 2); P("#3b2410", -1, 4, 2, 1);
+      P("#ffd84a", -2, -4, 4, 4); P("#ffd84a", -4, -1, 8, 1); P("#ffd84a", -3, 0, 6, 1); P("#ffd84a", -2, 1, 4, 1); P("#ffd84a", -1, 2, 2, 1);
+      P("#fff5b8", -1, -4, 1, 3);
+      ctx.restore();
+    };
+    const m = 36;
+    if (sx > m && sx < VIEW_W - m && sy > m && sy < VIEW_H - m) {
+      shape(sx, sy - 22 - Math.abs(Math.sin(t * 4)) * 14, 0, 1);
+    } else {
+      const cx = VIEW_W / 2, cy = VIEW_H / 2, dx = sx - cx, dy = sy - cy, k = Math.min((VIEW_W / 2 - m) / Math.abs(dx || 1e-6), (VIEW_H / 2 - m) / Math.abs(dy || 1e-6));
+      shape(cx + dx * k, cy + dy * k, Math.atan2(dy, dx) - Math.PI / 2, 0.8 + 0.1 * pulse);
+    }
+  }
+
+  function drawOverlay(ctx, state, particles, birds, player, stations, VIEW_W, VIEW_H, plantInfo, cam, chaser, goal) {
     cam = cam || { x: 0, y: 0, wz: 1 };
     const wrap = (v, m) => ((v % m) + m) % m;
     particles.forEach((q) => {
@@ -809,6 +834,10 @@ ACM.ArtWorld = (function () {
       });
     }
 
+    if (chaser && ACM.ArtCritters) ACM.ArtCritters.drawSquirrelRun(ctx, chaser, chaser.x * cam.wz - cam.x, chaser.y * cam.wz - cam.y);
+
+    if (goal) drawGoalArrow(ctx, goal, cam, VIEW_W, VIEW_H, player);
+
     // minimap
     const mw = 144, mh = 96, mx = VIEW_W - mw - 10, my = 10;
     ctx.fillStyle = "rgba(24, 15, 9, 0.88)";
@@ -824,6 +853,12 @@ ACM.ArtWorld = (function () {
       ctx.fillStyle = s.id === "legacy_house" ? "#e85d3a" : "#fff3b8";
       ctx.fillRect(Math.round(mx + s.sx * sx - 1), Math.round(my + s.sy * sy - 1), 3, 3);
     });
+    if (goal) {
+      const on = Math.floor(Date.now() / 350) % 2 === 0, gx = mx + goal.x * sx, gy = my + goal.y * sy;
+      ctx.strokeStyle = on ? "#ffd84a" : "rgba(255,216,74,0.35)"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(gx, gy, on ? 6 : 4, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = on ? "#ffd84a" : "#c9962a"; ctx.fillRect(Math.round(gx - 2), Math.round(gy - 2), 4, 4);
+    }
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(Math.round(mx + player.x * sx - 2), Math.round(my + player.y * sy - 2), 4, 4);
     ctx.strokeStyle = "#111";

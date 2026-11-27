@@ -51,14 +51,22 @@ ACM.Workshop = (function () {
   function openPlans(game) {
     const S = game.state;
     const nm = (t) => (ACM.TOOLS.find((x) => x.id === t) || { name: t }).name;
-    const cards = adds().map((a) => {
+    const list = adds();
+    const card = (a) => {
       const built = S.workshop[a.id], c = canBuild(game, a);
       return `<div class="item-card ${built ? "owned" : ""}"><div class="item-title">${a.name} · $${a.cost}</div>
         <p class="item-meta">${a.blurb}</p><p class="item-meta"><strong>Fits:</strong> ${a.fits.map(nm).join(", ")}</p>
         <div class="dialog-actions">${built ? '<span class="tag" style="background:#bbf7d0;">Built</span>' : `<button class="btn-brass btn-sm" data-wsb="${a.id}" ${c.ok ? "" : "disabled"}>Build ($${a.cost})</button><span class="item-meta">${c.ok ? "" : c.why.join(" · ")}</span>`}</div></div>`;
-    }).join("");
-    game.openModal("Workshop Plans", `<p class="item-meta">Your workshop is a small shop. The mitre saw and dust collector fit as they are; bigger machines need a bay built first. You can buy the machine only once there is somewhere to put it.</p><div class="card-grid">${cards}</div>
-      <div class="dialog-actions"><button class="btn-wood btn-sm" data-act="close">Close</button></div>`);
+    };
+    const done = list.filter((a) => S.workshop[a.id]);
+    const todo = list.filter((a) => !S.workshop[a.id]);
+    const later = todo.slice(1);
+    const html = `<p class="item-meta">Your workshop is a small shop. The mitre saw and dust collector fit as they are; bigger machines need a bay built first.</p>` + ACM.Reveal.tabs([
+      { key: "next", label: todo.length ? "Next addition" : "All built", html: todo.length ? `<div class="card-grid">${card(todo[0])}</div>` : `<p class="item-meta">Every bay is built. Nice shop!</p>` },
+      { key: "built", label: "Built", count: done.length || null, html: done.length ? `<div class="card-grid">${done.map(card).join("")}</div>` : "" },
+      { key: "later", label: "Later", count: later.length || null, html: later.length ? `<div class="card-grid">${later.map((a) => ACM.Reveal.locked(a.name, "Build the earlier additions first.")).join("")}</div>` : "" }
+    ]) ;
+    game.openModal("Workshop Plans", html + `<div class="dialog-actions"><button class="btn-wood btn-sm" data-act="close">Close</button></div>`);
     document.querySelectorAll("#modal-body [data-wsb]").forEach((b) => (b.onclick = () => { if (buy(game, b.dataset.wsb)) openPlans(game); }));
   }
   return { zones, key, fits, addFor, migrate, canBuild, buy, openPlans };

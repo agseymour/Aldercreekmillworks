@@ -706,6 +706,56 @@ ACM.World = (function () {
   }
 
   /* ----------------------------------------------------------- update */
+  // the giant squirrel: bursts from the felled stump and chases the player; when it reaches them the day ends
+  let chaser = null;
+  function startChase(tx, ty, onCaught) {
+    chaser = { x: tx * T + 16, y: ty * T + 16, dir: 1, frame: 0, age: 0, onCaught };
+  }
+  function updateChaser() {
+    const c = chaser;
+    if (!c) return;
+    c.age++; c.frame += 0.28;
+    const dx = player.x - c.x, dy = player.y - c.y, d = Math.hypot(dx, dy) || 1;
+    if (Math.abs(dx) > 2) c.dir = dx > 0 ? 1 : -1;
+    const spd = Math.max(2.2, Math.min(4.6, player.speed * 1.35 + (c.age > 240 ? 0.6 : 0)));
+    c.x += (dx / d) * Math.min(spd, d); c.y += (dy / d) * Math.min(spd, d);
+    // inside a building you're caught right away (it follows you in); also caught after a long chase
+    if (d < 20 || scene || c.age > 900) { chaser = null; const cb = c.onCaught; if (cb) cb(); }
+  }
+
+  // --- goal guide: resolves ACM.Game.goalTarget() to a point in the world (outdoors only) ---
+  let goalPt = null, goalAt = -99;
+  function resolveGoal() {
+    if (tick - goalAt < 20) return goalPt;
+    goalAt = tick; goalPt = null;
+    if (scene || !ACM.Game || !ACM.Game.goalTarget) return null;
+    const g = ACM.Game.goalTarget();
+    if (!g) return null;
+    const door = (b) => ({ x: (b.doorX + 0.5) * T, y: (b.y + b.h) * T - 8, label: b.kind });
+    if (g.npc) {
+      const n = npcs.find((q) => q.id === g.npc);
+      if (!n) return null;
+      if (!n.hidden) goalPt = { x: n.px, y: n.py - 30, label: g.npc };
+      else {
+        const p = n.def.posts && n.def.posts.day;
+        const bs = M.buildings.filter((b) => b.doorX != null).sort((a, b2) => {
+          const d = (b) => p ? Math.hypot(b.x + b.w / 2 - p[0], b.y + b.h / 2 - p[1]) : 0; return d(a) - d(b2); });
+        if (bs[0]) goalPt = door(bs[0]);
+      }
+    } else if (g.station) {
+      const s = M.stations.find((q) => q.id === g.station);
+      if (s) goalPt = { x: s.ix * T, y: s.iy * T - 30, label: s.shortLabel };
+    } else if (g.bld) {
+      const b = M.buildings.find((q) => q.kind === g.bld || q.id === g.bld);
+      if (b) goalPt = door(b);
+    } else if (g.tree) {
+      let best = null, bd = 1e9;
+      M.natureTrees.forEach((t) => { const d = Math.hypot(t.tx * T - player.x, t.ty * T - player.y); if (d < bd) { const i = treeInfoAt(t.tx, t.ty); if (i && i.stage >= 2) { bd = d; best = t; } } });
+      if (best) goalPt = { x: best.tx * T + 16, y: best.ty * T - 24, label: "tree" };
+    }
+    return goalPt;
+  }
+
   function update(state) {
     tick++;
     curState = state;
@@ -719,6 +769,7 @@ ACM.World = (function () {
 
     if (state.timeMin == null) state.timeMin = 360;
     if (state.energy == null) { state.energy = 100; state.maxEnergy = 100; }
+    updateChaser();
     state.timeMin += TIME_PER_TICK;
     if (state.timeMin >= 1440) {
       if (!midnightFired) { midnightFired = true; if (handlers.onMidnight) handlers.onMidnight(); }
@@ -1108,7 +1159,7 @@ ACM.World = (function () {
       ctx.restore();
     }
 
-    AW.drawOverlay(ctx, state, particles, birds, player, M.stations, VIEW_W, VIEW_H, plantLabel, { x: camera.x * WZ, y: camera.y * WZ, wz: WZ });
+    AW.drawOverlay(ctx, state, particles, birds, player, M.stations, VIEW_W, VIEW_H, plantLabel, { x: camera.x * WZ, y: camera.y * WZ, wz: WZ }, chaser, resolveGoal());
     if (fade > 0) { ctx.fillStyle = "rgba(0,0,0," + fade + ")"; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
   }
 
@@ -1126,6 +1177,9 @@ ACM.World = (function () {
     wouldTrap,
     rescue,
     spawnBurst,
+    startChase,
+    isChasing: () => !!chaser,
+    clearChase: () => { chaser = null; },
     getNpcs: () => npcs,
     enterBuilding,
     exitBuilding,

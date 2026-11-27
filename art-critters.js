@@ -99,5 +99,31 @@ ACM.ArtCritters = (function () {
     c.putImageData(new ImageData(out, W, H), 0, 0);
   }
 
-  return { SPECIES, NAMES, drawBird, drawSquirrel };
+  /** the squirrel in the world, bounding along. c: { x, y, dir, frame }. Drawn at 2x so it reads as a very large squirrel. */
+  function drawSquirrelRun(ctx, c, sx, sy) {
+    const u = 3, f = Math.floor(c.frame) % 4, O = "#2e1c0e", B = "#8a5a2c", L = "#b87a3e", C = "#f0dcb0";
+    ctx.save();
+    ctx.translate(Math.round(sx), Math.round(sy));
+    ctx.fillStyle = "rgba(0,0,0,0.2)"; ctx.beginPath(); ctx.ellipse(0, 4, 17, 4, 0, 0, Math.PI * 2); ctx.fill();
+    if (c.dir < 0) ctx.scale(-1, 1);
+    const R = (k, x, y, w, h) => { ctx.fillStyle = k; ctx.fillRect(x * u, y * u, w * u, h * u); };
+    const lift = (f === 1 || f === 3) ? -2 : 0;           // bounding: body rises mid-stride
+    ctx.translate(0, lift * u);
+    // huge fluffy tail, curled up behind
+    R(O, -10, -9, 6, 11); R(B, -9, -8, 4, 9); R(L, -8, -7, 2, 7);
+    R(O, -8, -12, 5, 4); R(B, -7, -11, 3, 3); R("#e6b878", -6, -11, 1, 1);
+    // body + belly
+    R(O, -5, -3, 11, 7); R(B, -4, -2, 9, 5); R(C, -2, 1, 6, 2);
+    // head, ear, furious eye, teeth
+    R(O, 4, -6, 7, 7); R(B, 5, -5, 5, 5); R(O, 5, -8, 2, 2); R(B, 5, -7, 1, 1);
+    R("#fff", 8, -4, 2, 2); R("#e23a2a", 9, -4, 1, 2); R(O, 7, -5, 3, 1);
+    R(O, 10, -2, 3, 2); R("#e08a8a", 11, -3, 1, 1); R("#fff", 9, -1, 1, 2); R("#fff", 11, -1, 1, 2);
+    // legs: alternate stretched / tucked
+    const stretch = f === 0 || f === 2;
+    R(O, stretch ? 5 : 2, 4, 3, 2); R(O, stretch ? -6 : -3, 4, 3, 2);
+    R(B, stretch ? 6 : 3, 4, 1, 1); R(B, stretch ? -5 : -2, 4, 1, 1);
+    ctx.restore();
+  }
+
+  return { SPECIES, NAMES, drawBird, drawSquirrel, drawSquirrelRun };
 })();

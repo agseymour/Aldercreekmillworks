@@ -3,7 +3,7 @@ window.ACM = window.ACM || {};
 ACM.CloudSync = (function () {
   // PASTE YOUR SUPABASE PROJECT URL & ANON PUBLIC KEY BELOW:
   const RAW_SUPABASE_URL = "https://zifhqglitwbqfsomdndv.supabase.co"; // e.g., "https://abcdefghijklm.supabase.co"
-  const RAW_SUPABASE_ANON_KEY = "zifhqglitwbqfsomdndv"; // e.g., "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  const RAW_SUPABASE_ANON_KEY = "sb_publishable_ZnYAXhon3E0dDpH3BM7wQQ_W1BVBHbb"; // e.g., "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 
   const SUPABASE_URL = RAW_SUPABASE_URL.trim().replace(/\/+$/, "");
   const SUPABASE_ANON_KEY = RAW_SUPABASE_ANON_KEY.trim();

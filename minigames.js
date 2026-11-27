@@ -159,12 +159,12 @@ ACM.Minigames = (function () {
     const prog = game.state.jobProgress;
     if (!prog.lumberAssigned) {
       const validStocks = ACM.LUMBER.filter(
-        (l) => job.lumberReq.allowedIds.includes(l.id) && (game.state.lumberStock[l.id] || 0) >= job.lumberReq.units
+        (l) => ACM.lumberAllowed(job, l.id) && (game.state.lumberStock[l.id] || 0) >= job.lumberReq.units
       );
 
       let html = `<p><strong>Active Project:</strong> ${job.title} (Needs ${job.lumberReq.units} units of approved stock)</p>`;
       if (validStocks.length === 0) {
-        html += `<p style="color:#b91c1c; margin-top:8px;">You don't have enough approved lumber in stock! Visit <strong>Routledge's Sawmill</strong> or harvest mature trees in <strong>Your Woodlot</strong> to gather ${job.lumberReq.units} units of: <strong>${job.lumberReq.allowedIds.map((id) => ACM.LUMBER.find((x) => x.id === id).name).join(", ")}</strong>.</p>`;
+        html += `<p style="color:#b91c1c; margin-top:8px;">You don't have enough approved lumber in stock! Visit <strong>Routledge's Sawmill</strong> or harvest mature trees in <strong>Your Woodlot</strong> to gather ${job.lumberReq.units} units of one kind of board (the stock you mill from your own trees counts too; boards of different kinds can't be mixed). Store-bought options: <strong>${job.lumberReq.allowedIds.map((id) => ACM.LUMBER.find((x) => x.id === id).name).join(", ")}</strong>.</p>`;
       } else {
         html += `<p style="margin-top:8px;">Select lumber from your rack to begin layout:</p><div class="card-grid">`;
         validStocks.forEach((l) => {
