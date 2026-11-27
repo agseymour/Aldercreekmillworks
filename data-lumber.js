@@ -12,7 +12,7 @@ ACM.LUMBER = [
     weatherResistant: false,
     hardwood: false,
     nailRisk: 0,
-    desc: "Spruce-Pine-Fir surfaced on four sides. Affordable and easy to cut, but soft and prone to outdoor rot."
+    desc: "Spruce-Pine-Fir surfaced on four sides. Affordable and easy to cut, great for framing and utility builds."
   },
   {
     id: "pine_s4s",
@@ -25,7 +25,7 @@ ACM.LUMBER = [
     weatherResistant: false,
     hardwood: false,
     nailRisk: 0,
-    desc: "Classic Nova Scotia softwood. Straight grain, light weight, great for indoor boxes and shelving."
+    desc: "Classic Nova Scotia softwood. Straight grain, light weight, ideal for birdhouses, boxes, and shelving."
   },
   {
     id: "cedar_s4s",
@@ -90,7 +90,7 @@ ACM.LUMBER = [
     weatherResistant: false,
     hardwood: true,
     nailRisk: 0,
-    desc: "Dense, wear-resistant hardwood sold rough from the sawmill. Must be jointed and planed before cutting."
+    desc: "Dense, wear-resistant hardwood. Buy rough or harvest from your Woodlot, then joint and plane."
   },
   {
     id: "cherry_rough",
@@ -103,7 +103,7 @@ ACM.LUMBER = [
     weatherResistant: false,
     hardwood: true,
     nailRisk: 0,
-    desc: "Prized furniture hardwood that darkens to a rich reddish-brown patina with age. Needs milling."
+    desc: "Prized furniture hardwood that darkens to a rich reddish-brown patina with age."
   },
   {
     id: "reclaimed_barn",
@@ -116,7 +116,7 @@ ACM.LUMBER = [
     weatherResistant: true,
     hardwood: false,
     nailRisk: 0.45,
-    desc: "Bargain salvaged timber with character—WARNING: high chance of hidden nails that can chip jointer/planer knives!"
+    desc: "Bargain salvaged timber with character—WARNING: high chance of hidden nails that chip cutterhead knives!"
   },
   {
     id: "white_oak_rough",
@@ -156,5 +156,58 @@ ACM.LUMBER = [
     hardwood: true,
     nailRisk: 0,
     desc: "Rare chatoyant ripple grain for heirloom commissions. Prone to tear-out if planed aggressively."
+  }
+];
+
+ACM.SAPLINGS = [
+  {
+    id: "sapling_pine",
+    species: "Eastern White Pine",
+    price: 8,
+    growDays: 2,
+    yieldLumberId: "pine_s4s",
+    yieldUnits: 4,
+    canopyColor: "#2d6a4f",
+    desc: "Fast-growing Nova Scotia evergreen. Matures in 2 days and yields 4 bd ft of White Pine."
+  },
+  {
+    id: "sapling_cedar",
+    species: "Eastern Red Cedar",
+    price: 12,
+    growDays: 3,
+    yieldLumberId: "cedar_s4s",
+    yieldUnits: 4,
+    canopyColor: "#1b4332",
+    desc: "Hardy coastal evergreen. Matures in 3 days and yields 4 bd ft of rot-resistant Cedar."
+  },
+  {
+    id: "sapling_maple",
+    species: "Sugar / Hard Maple",
+    price: 18,
+    growDays: 4,
+    yieldLumberId: "hard_maple_rough",
+    yieldUnits: 5,
+    canopyColor: "#40916c",
+    desc: "Turns brilliant crimson in Autumn. Matures in 4 days and yields 5 bd ft of Hard Maple."
+  },
+  {
+    id: "sapling_cherry",
+    species: "Black Cherry",
+    price: 22,
+    growDays: 4,
+    yieldLumberId: "cherry_rough",
+    yieldUnits: 5,
+    canopyColor: "#52b788",
+    desc: "Blossoms in Spring. Matures in 4 days and yields 5 bd ft of furniture-grade Cherry."
+  },
+  {
+    id: "sapling_walnut",
+    species: "Black Walnut",
+    price: 32,
+    growDays: 5,
+    yieldLumberId: "walnut_rough",
+    yieldUnits: 6,
+    canopyColor: "#386641",
+    desc: "Slow-growing heirloom hardwood. Matures in 5 days and yields 6 bd ft of Black Walnut."
   }
 ];
