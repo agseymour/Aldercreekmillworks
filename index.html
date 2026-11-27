@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Alder Creek Millworks — Production Tech 11 & 12</title>
-  <link rel="stylesheet" href="style.css?v=4" />
+  <link rel="stylesheet" href="style.css?v=5" />
 </head>
 <body>
   <div id="app-shell">
@@ -42,11 +42,19 @@
 
     <!-- Main Game Viewport -->
     <main id="viewport-wrap">
-      <canvas id="game-canvas" width="840" height="500"></canvas>
+      <canvas id="game-canvas" width="840" height="500" tabindex="0"></canvas>
+
+      <!-- Compact On-Screen D-Pad (Bottom-Left Backup) -->
+      <div id="dpad-controls" aria-label="Movement Controls">
+        <button type="button" class="dpad-btn dpad-up" data-dir="up" aria-label="Move Up">▲</button>
+        <button type="button" class="dpad-btn dpad-left" data-dir="left" aria-label="Move Left">◀</button>
+        <button type="button" class="dpad-btn dpad-down" data-dir="down" aria-label="Move Down">▼</button>
+        <button type="button" class="dpad-btn dpad-right" data-dir="right" aria-label="Move Right">▶</button>
+      </div>
 
       <!-- Bottom Interaction Prompt -->
       <div id="interaction-banner">
-        <span id="station-hint">Walk with WASD / Arrow Keys or click anywhere to explore Alder Creek.</span>
+        <span id="station-hint">Walk with WASD / Arrow Keys, use the D-Pad, or click anywhere to move.</span>
         <button class="btn-brass" id="btn-interact" disabled>Walk to a Building</button>
       </div>
     </main>
@@ -144,15 +152,15 @@
   </div>
 
   <!-- Modular Scripts in Dependency Order -->
-  <script src="data-tools.js?v=4"></script>
-  <script src="data-lumber.js?v=4"></script>
-  <script src="data-projects.js?v=4"></script>
-  <script src="data-questions.js?v=4"></script>
-  <script src="art-sprites.js?v=4"></script>
-  <script src="art-diagrams.js?v=4"></script>
-  <script src="minigames.js?v=4"></script>
-  <script src="world.js?v=4"></script>
-  <script src="cloud-sync.js?v=4"></script>
-  <script src="main.js?v=4"></script>
+  <script src="data-tools.js?v=5"></script>
+  <script src="data-lumber.js?v=5"></script>
+  <script src="data-projects.js?v=5"></script>
+  <script src="data-questions.js?v=5"></script>
+  <script src="art-sprites.js?v=5"></script>
+  <script src="art-diagrams.js?v=5"></script>
+  <script src="minigames.js?v=5"></script>
+  <script src="world.js?v=5"></script>
+  <script src="cloud-sync.js?v=5"></script>
+  <script src="main.js?v=5"></script>
 </body>
 </html>
