@@ -1,7 +1,7 @@
 window.ACM = window.ACM || {};
 
 ACM.TOOLS = [
-  // --- STARTER & TIER 1 TOOLS ---
+  // --- STARTER TOOLKIT (READY FOR BIRDHOUSE & WOODLOT) ---
   {
     id: "tape_measure",
     name: "16' Fractional Tape Measure",
@@ -25,17 +25,17 @@ ACM.TOOLS = [
     maxDurability: 999,
     sharpenCost: 0,
     requiresSafety: [],
-    desc: "L-shaped steel square (24\" blade x 16\" tongue) for marking 90° crosscuts, rafter angles, and checking diagonal squareness.",
-    curriculumNote: "Equal diagonal corner-to-corner measurements prove a rectangular cabinet is square."
+    desc: "L-shaped steel square (24\" blade × 16\" tongue) for marking 90° crosscuts, roof pitches, and checking diagonal squareness.",
+    curriculumNote: "Equal diagonal corner-to-corner measurements prove a rectangular box is square."
   },
   {
     id: "crosscut_saw",
     name: "Hand Cross Cut Saw",
     category: "tool",
     tier: 1,
-    price: 30,
-    starter: false,
-    maxDurability: 14,
+    price: 0,
+    starter: true,
+    maxDurability: 18,
     sharpenCost: 10,
     requiresSafety: ["safety_glasses"],
     desc: "Bevel-filed teeth act like tiny knives to sever wood fibers cleanly across the grain.",
@@ -46,14 +46,42 @@ ACM.TOOLS = [
     name: "16 oz Curved-Claw Hammer",
     category: "tool",
     tier: 1,
-    price: 20,
-    starter: false,
+    price: 0,
+    starter: true,
     maxDurability: 999,
     sharpenCost: 0,
     requiresSafety: ["safety_glasses"],
     desc: "Drives finish nails and taps dry-fit joints together when paired with a protective wood scrap block.",
     curriculumNote: "Never strike finished hardwood directly with a steel hammer face—use a scrap block or mallet."
   },
+  {
+    id: "safety_glasses",
+    name: "CSA Z94.3 Safety Glasses",
+    category: "safety",
+    tier: 1,
+    price: 0,
+    starter: true,
+    maxDurability: 999,
+    sharpenCost: 0,
+    requiresSafety: [],
+    desc: "Impact-rated side-shield eye protection required for every cutting, drilling, and striking operation.",
+    curriculumNote: "Mandatory in all Nova Scotia school production labs."
+  },
+  {
+    id: "felling_axe",
+    name: "Forestry Felling Axe & Bucksaw",
+    category: "forestry",
+    tier: 1,
+    price: 0,
+    starter: true,
+    maxDurability: 999,
+    sharpenCost: 0,
+    requiresSafety: ["safety_glasses"],
+    desc: "Used in your Woodlot to fell mature planted trees and buck logs into rough-sawn lumber.",
+    curriculumNote: "Plan an escape path at 45° away from the felling direction before making the back cut."
+  },
+
+  // --- TIER 1 PURCHASABLE TOOLS ---
   {
     id: "screwdriver",
     name: "Robertson & Slot Screwdriver Set",
@@ -72,7 +100,7 @@ ACM.TOOLS = [
     name: "18V Cordless Drill & Bit Index",
     category: "tool",
     tier: 1,
-    price: 65,
+    price: 55,
     starter: false,
     maxDurability: 18,
     sharpenCost: 12,
@@ -87,7 +115,7 @@ ACM.TOOLS = [
     name: "12\" Sliding Compound Mitre Saw",
     category: "tool",
     tier: 2,
-    price: 190,
+    price: 180,
     starter: false,
     maxDurability: 22,
     sharpenCost: 22,
@@ -100,7 +128,7 @@ ACM.TOOLS = [
     name: "Western Brass-Spine Back Saw",
     category: "tool",
     tier: 2,
-    price: 48,
+    price: 45,
     starter: false,
     maxDurability: 16,
     sharpenCost: 12,
@@ -115,12 +143,12 @@ ACM.TOOLS = [
     name: "8\" Helical-Head Jointer",
     category: "tool",
     tier: 3,
-    price: 420,
+    price: 390,
     starter: false,
     maxDurability: 25,
     sharpenCost: 35,
     requiresSafety: ["safety_glasses", "ear_muffs", "push_blocks"],
-    desc: "Flattens one face of rough-sawn lumber and squares one reference edge to 90°.",
+    desc: "Flattens one face of rough-sawn lumber (including trees harvested from your Woodlot!) and squares one edge to 90°.",
     curriculumNote: "Step 1 of S4S milling: always flatten a face on the jointer BEFORE using the thickness planer."
   },
   {
@@ -128,7 +156,7 @@ ACM.TOOLS = [
     name: "15\" Thickness Planer",
     category: "tool",
     tier: 3,
-    price: 400,
+    price: 375,
     starter: false,
     maxDurability: 25,
     sharpenCost: 35,
@@ -141,13 +169,13 @@ ACM.TOOLS = [
     name: "3HP Cabinet Table Saw",
     category: "tool",
     tier: 3,
-    price: 520,
+    price: 490,
     starter: false,
     maxDurability: 28,
     sharpenCost: 30,
     requiresSafety: ["safety_glasses", "ear_muffs", "push_blocks", "riving_knife"],
     desc: "Rips lumber to exact width against the rip fence and cuts crisp dadoes and rabbets.",
-    curriculumNote: "Never use the rip fence and mitre gauge together without a clearance block—trapped offcuts cause violent kickback."
+    curriculumNote: "Never use the rip fence and mitre gauge together without a clearance block—trapped offcuts cause kickback."
   },
 
   // --- TIER 4 & 5 SPECIALTY TOOLS ---
@@ -156,7 +184,7 @@ ACM.TOOLS = [
     name: "14\" Cast-Iron Band Saw",
     category: "tool",
     tier: 4,
-    price: 480,
+    price: 450,
     starter: false,
     maxDurability: 24,
     sharpenCost: 25,
@@ -180,24 +208,11 @@ ACM.TOOLS = [
 
   // --- SAFETY GEAR & SHOP UPGRADES ---
   {
-    id: "safety_glasses",
-    name: "CSA Z94.3 Safety Glasses",
-    category: "safety",
-    tier: 1,
-    price: 15,
-    starter: false,
-    maxDurability: 999,
-    sharpenCost: 0,
-    requiresSafety: [],
-    desc: "Impact-rated side-shield eye protection required for every cutting, drilling, and striking operation.",
-    curriculumNote: "Mandatory in all Nova Scotia school production labs."
-  },
-  {
     id: "ear_muffs",
     name: "NRR 28dB Hearing Protection",
     category: "safety",
     tier: 2,
-    price: 25,
+    price: 22,
     starter: false,
     maxDurability: 999,
     sharpenCost: 0,
@@ -210,7 +225,7 @@ ACM.TOOLS = [
     name: "High-Friction Push Blocks & Sticks",
     category: "safety",
     tier: 2,
-    price: 30,
+    price: 28,
     starter: false,
     maxDurability: 999,
     sharpenCost: 0,
@@ -249,7 +264,7 @@ ACM.TOOLS = [
     name: "2HP Cyclone Dust Collector",
     category: "safety",
     tier: 4,
-    price: 350,
+    price: 340,
     starter: false,
     maxDurability: 999,
     sharpenCost: 0,
