@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Alder Creek Millworks — Production Tech 11 & 12</title>
-  <link rel="stylesheet" href="style.css?v=5" />
+  <link rel="stylesheet" href="style.css?v=21" />
 </head>
 <body>
   <div id="app-shell">
@@ -34,8 +34,9 @@
       </div>
       <div class="hud-group hud-actions">
         <button class="btn-wood btn-sm" id="btn-story">Commissions</button>
-        <button class="btn-wood btn-sm" id="btn-inventory">Inventory</button>
+        <button class="btn-wood btn-sm" id="btn-inventory">Backpack [I]</button>
         <button class="btn-wood btn-sm" id="btn-leaderboard">Leaderboard</button>
+        <button class="btn-wood btn-sm" id="btn-sound" title="Sound on / off">🔊</button>
         <button class="btn-brass btn-sm" id="btn-save">Save</button>
       </div>
     </header>
@@ -51,6 +52,12 @@
         <button type="button" class="dpad-btn dpad-down" data-dir="down" aria-label="Move Down">▼</button>
         <button type="button" class="dpad-btn dpad-right" data-dir="right" aria-label="Move Right">▶</button>
       </div>
+
+      <!-- Current objective (tutorial / story) -->
+      <div id="objective-bar" class="hidden"></div>
+
+      <!-- Plant bar: pick a sapling, then click any open grass -->
+      <div id="hotbar-wrap"><div id="hotbar" aria-label="Hotbar"></div><div id="info-bar"></div></div>
 
       <!-- Bottom Interaction Prompt -->
       <div id="interaction-banner">
@@ -152,15 +159,34 @@
   </div>
 
   <!-- Modular Scripts in Dependency Order -->
-  <script src="data-tools.js?v=5"></script>
-  <script src="data-lumber.js?v=5"></script>
-  <script src="data-projects.js?v=5"></script>
-  <script src="data-questions.js?v=5"></script>
-  <script src="art-sprites.js?v=5"></script>
-  <script src="art-diagrams.js?v=5"></script>
-  <script src="minigames.js?v=5"></script>
-  <script src="world.js?v=5"></script>
-  <script src="cloud-sync.js?v=5"></script>
-  <script src="main.js?v=5"></script>
+  <script src="data-workshop.js?v=21"></script>
+  <script src="data-tools.js?v=21"></script>
+  <script src="data-lumber.js?v=21"></script>
+  <script src="data-projects.js?v=21"></script>
+  <script src="data-questions.js?v=21"></script>
+  <script src="data-safety.js?v=21"></script>
+  <script src="data-repairs.js?v=21"></script>
+  <script src="data-story.js?v=21"></script>
+  <script src="art-sprites.js?v=21"></script>
+  <script src="art-diagrams.js?v=21"></script>
+  <script src="minigames.js?v=21"></script>
+  <script src="drafting.js?v=21"></script>
+  <script src="art-safety.js?v=21"></script>
+  <script src="safety.js?v=21"></script>
+  <script src="measure.js?v=21"></script>
+  <script src="story.js?v=21"></script>
+  <script src="data-npcs.js?v=21"></script>
+  <script src="data-foods.js?v=21"></script>
+  <script src="data-interiors.js?v=21"></script>
+  <script src="data-measure.js?v=21"></script>
+  <script src="audio.js?v=21"></script>
+  <script src="world-map.js?v=21"></script>
+  <script src="art-buildings.js?v=21"></script>
+  <script src="art-icons.js?v=21"></script>
+  <script src="art-world.js?v=21"></script>
+  <script src="art-interiors.js?v=21"></script>
+  <script src="world.js?v=21"></script>
+  <script src="cloud-sync.js?v=21"></script>
+  <script src="main.js?v=21"></script>
 </body>
 </html>

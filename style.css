@@ -19,6 +19,13 @@
   user-select: none;
 }
 
+input,
+select,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 body {
   background: var(--bg-dark);
   color: var(--ink);
@@ -134,7 +141,7 @@ body {
 #dpad-controls {
   position: absolute;
   left: 14px;
-  bottom: 52px;
+  bottom: 168px;
   width: 96px;
   height: 96px;
   display: grid;
@@ -166,6 +173,11 @@ body {
 .dpad-btn.pressed {
   background: var(--brass);
   color: #241509;
+}
+
+/* On narrow screens the banner below the canvas wraps to two lines; lift the D-pad so it doesn't overlap it. */
+@media (max-width: 600px) {
+  #dpad-controls { bottom: 200px; }
 }
 
 .dpad-up { grid-column: 2; grid-row: 1; }
@@ -554,14 +566,15 @@ table.shop-table th {
 
 /* Toasts */
 #toast-container {
-  position: absolute;
-  top: 58px;
+  position: fixed;
+  top: 12px;
   right: 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  z-index: 40;
+  z-index: 100; /* must sit above #modal-overlay / #creator-modal (z-index 50) */
   pointer-events: none;
+  max-width: min(360px, calc(100vw - 24px));
 }
 
 .toast {
@@ -587,3 +600,81 @@ table.shop-table th {
   from { opacity: 0; transform: translateX(12px); }
   to { opacity: 1; transform: translateX(0); }
 }
+
+/* Plant bar (sapling selector under the map) */
+#plant-bar {
+  width: 100%;
+  background: #1f3a2a;
+  border-top: 2px solid #3c7a47;
+  padding: 6px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: #d6f2d8;
+  font-size: 0.82rem;
+}
+.plant-label { font-weight: bold; color: #9fe0a4; margin-right: 4px; }
+.plant-empty { color: #b9d9bd; font-style: italic; }
+.plant-tip { margin-left: auto; color: #9bc4a0; font-size: 0.72rem; }
+.plant-chip {
+  background: #2f5a3d;
+  color: #eaffec;
+  border: 2px solid #4f9a5c;
+  padding: 3px 9px;
+  font-size: 0.8rem;
+}
+.plant-chip:hover { background: #3a704a; }
+.plant-chip.active { background: #f0be59; color: #241509; border-color: #754c11; }
+#interaction-banner { gap: 10px; }
+#station-hint { flex: 1; }
+
+/* Objective bar */
+#objective-bar {
+  width: 100%;
+  background: #3b2a12;
+  border-top: 2px solid #d49b35;
+  color: #ffe9b0;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
+#objective-bar strong { color: #f0be59; }
+
+/* NPC dialogue */
+.npc-dialog { display: flex; gap: 14px; align-items: flex-start; }
+.npc-portrait { background: #d7c49c; border: 3px solid #8a5c3c; border-radius: 8px; padding: 4px; flex: none; }
+.npc-portrait canvas { image-rendering: pixelated; display: block; }
+.speech { background: #fffaf0; border: 2px solid #c4ab7e; border-radius: 10px; padding: 10px 12px; flex: 1; line-height: 1.5; }
+.hearts { font-size: 1.1rem; letter-spacing: 2px; color: #d6405a; }
+.hearts .empty { color: #c9b9a0; }
+.dialog-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.tut-box { background: #eef7e8; border: 2px solid #7fb069; border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
+.tut-row { display: flex; gap: 10px; align-items: flex-start; margin: 6px 0; }
+.tut-ico { font-size: 1.3rem; width: 28px; text-align: center; flex: none; }
+.job-slot { border-left: 5px solid #d49b35; }
+.energy-note { font-size: 0.78rem; color: #5c4938; }
+
+/* Hotbar + info bar */
+#hotbar-wrap { width: 100%; background: #2a1c10; border-top: 2px solid #d49b35; }
+#hotbar { display: flex; justify-content: center; gap: 3px; padding: 5px 6px 3px; }
+.slot { position: relative; width: 46px; height: 46px; flex: none; background: #d9c08a; border: 2px solid #8a5c3c; border-radius: 4px; box-shadow: inset 0 0 0 2px #ecd9a8; cursor: pointer; padding: 0; }
+.slot:hover { background: #e6cf9c; }
+.slot.sel { border-color: #f0be59; box-shadow: inset 0 0 0 2px #fff0b8, 0 0 0 2px #c0392b; z-index: 1; }
+.slot.held { opacity: 0.55; }
+.slot canvas { position: absolute; left: 2px; top: 2px; width: 38px; height: 38px; image-rendering: pixelated; pointer-events: none; }
+.slot .num { position: absolute; left: 3px; top: 0; font: bold 10px "Trebuchet MS", sans-serif; color: #6b4423; pointer-events: none; }
+.slot.sel .num { color: #c0392b; }
+.slot .qty { position: absolute; right: 2px; bottom: -1px; font: bold 12px "Trebuchet MS", sans-serif; color: #fff; pointer-events: none;
+  text-shadow: 1px 0 #2b1d12, -1px 0 #2b1d12, 0 1px #2b1d12, 0 -1px #2b1d12; }
+#info-bar { min-height: 24px; padding: 3px 12px 5px; color: #ffe9b0; font-size: 0.85rem; text-align: center; }
+#info-bar strong { color: #f0be59; }
+.inv-grid { display: grid; grid-template-columns: repeat(12, 48px); gap: 3px; justify-content: center; padding: 8px; background: #2a1c10; border-radius: 8px; }
+.inv-grid .slot { width: 48px; height: 48px; }
+.inv-grid .slot canvas { width: 40px; height: 40px; }
+.inv-info { margin-top: 8px; padding: 8px 12px; background: #3b2a12; color: #ffe9b0; border-radius: 6px; min-height: 64px; }
+.inv-info strong { color: #f0be59; }
+.inv-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+.inv-tabs button.active { background: #f0be59; color: #241509; }
+.keycap { display: inline-block; min-width: 22px; padding: 1px 6px; margin: 0 2px; border: 2px solid #8a5c3c; border-bottom-width: 4px; border-radius: 5px; background: #f6ecd0; font: bold 12px "Trebuchet MS", sans-serif; text-align: center; }
+.ctl-table td { padding: 5px 8px; vertical-align: middle; }
+@media (max-width: 760px) { .inv-grid { grid-template-columns: repeat(6, 48px); } .slot { width: 36px; height: 36px; } .slot canvas { width: 28px; height: 28px; } }

@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alder Creek Millworks – Teacher Dashboard</title>
+<style>
+  :root { --bg:#f6f1e6; --card:#fffdf7; --ink:#2a1d12; --mute:#6f5d4b; --line:#e3d8c3; --brand:#8a5a2c; --good:#2f7d46; --warn:#b7791f; --bad:#b4372b; --accent:#2b6a8f; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1d1812; --card:#2a231a; --ink:#f1e8d8; --mute:#b9a78e; --line:#43392b; --brand:#e0a85c; --good:#6fcf8b; --warn:#f0b955; --bad:#ff8b7b; --accent:#7ec1e6; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; flex:1; min-width:200px; }
+  main { padding:16px 20px 40px; max-width:1300px; margin:0 auto; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  .login { max-width:420px; margin:60px auto; }
+  label { display:block; font-size:13px; color:var(--mute); margin:10px 0 3px; }
+  input { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:7px; background:var(--bg); color:var(--ink); font-size:15px; }
+  button { padding:8px 14px; border:1px solid var(--brand); background:var(--brand); color:#fff; border-radius:7px; font-size:14px; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--brand); }
+  button:disabled { opacity:.5; cursor:default; }
+  .err { color:var(--bad); margin-top:8px; min-height:1.2em; }
+  .note { color:var(--mute); font-size:13px; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:14px; }
+  .tile .v { font-size:26px; font-weight:700; }
+  .tile .l { font-size:12px; color:var(--mute); text-transform:uppercase; letter-spacing:.05em; }
+  .tablewrap { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th, td { padding:8px 10px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; }
+  th { font-size:12px; color:var(--mute); text-transform:uppercase; letter-spacing:.04em; cursor:pointer; user-select:none; }
+  th.sorted::after { content:" ▾"; }
+  th.asc.sorted::after { content:" ▴"; }
+  tbody tr { cursor:pointer; }
+  tbody tr:hover { background:rgba(138,90,44,.08); }
+  tr.sel { background:rgba(138,90,44,.14); }
+  .pill { display:inline-block; padding:1px 8px; border-radius:99px; font-size:12px; border:1px solid var(--line); }
+  .good { color:var(--good); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+  .flag { background:rgba(180,55,43,.12); color:var(--bad); border-color:var(--bad); margin-right:4px; }
+  .bar { display:block; height:8px; border-radius:4px; background:var(--accent); vertical-align:middle; }
+  .barbg { display:inline-block; width:70px; height:8px; border-radius:4px; background:var(--line); vertical-align:middle; margin-right:6px; overflow:hidden; }
+  .detail { margin-top:14px; display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:12px; }
+  .detail h3 { margin:0 0 8px; font-size:15px; }
+  .row { display:flex; justify-content:space-between; gap:10px; padding:3px 0; border-bottom:1px dashed var(--line); font-size:14px; }
+  .toolbar { display:flex; gap:8px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
+  .toolbar .sp { flex:1; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🪵 Alder Creek Millworks · Teacher Dashboard</h1>
+  <span id="who" class="note"></span>
+  <button class="ghost hidden" id="btn-refresh">Refresh</button>
+  <button class="ghost hidden" id="btn-csv">Export class CSV</button>
+  <button class="ghost hidden" id="btn-ev">Export raw events</button>
+  <button class="ghost hidden" id="btn-out">Sign out</button>
+</header>
+<main>
+  <section id="login" class="card login">
+    <h2 style="margin-top:0">Teacher sign-in</h2>
+    <p class="note">Enter your class code and a teacher PIN. The first time a class code is used here, the PIN you type becomes that class's teacher PIN (stored as a hash, never in plain text). Students can't see this page's data without it.</p>
+    <label for="code">Class code</label><input id="code" maxlength="20" autocomplete="off" placeholder="e.g. PRODTECH11A">
+    <label for="pin">Teacher PIN (4+ characters)</label><input id="pin" type="password" maxlength="24" autocomplete="off">
+    <div style="margin-top:14px"><button id="go">Open class</button></div>
+    <div class="err" id="err"></div>
+    <p class="note" id="mode"></p>
+  </section>
+
+  <section id="dash" class="hidden">
+    <div class="tiles" id="tiles"></div>
+    <div class="card" id="attention" style="margin-bottom:14px"></div>
+    <div class="card">
+      <div class="toolbar"><strong>Students</strong><span class="note" id="src"></span><span class="sp"></span><input id="filter" placeholder="Filter by name" style="max-width:220px"></div>
+      <div class="tablewrap"><table id="tbl"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="detail" id="detail"></div>
+    <div class="detail" id="items"></div>
+  </section>
+</main>
+
+<script src="data-safety.js"></script>
+<script src="data-questions.js"></script>
+<script src="data-repairs.js"></script>
+<script src="cloud-sync.js"></script>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const PERMITS = (window.ACM && ACM.SAFETY) || [];
+  const MEASURE_TOTAL = 32, STORY_TOTAL = 5;
+  let CLASS = "", students = [], sortKey = "name", sortAsc = true, selected = null, mode = "";
+
+  // ---------- turn one saved game into the numbers a teacher cares about ----------
+  function analyse(s) {
+    const ev = Array.isArray(s.events) ? s.events : [];
+    const dels = ev.filter((e) => e.t === "deliver");
+    const quizzes = ev.filter((e) => e.t === "quiz");
+    const exams = ev.filter((e) => e.t === "exam");
+    const meas = ev.filter((e) => e.t === "measure");
+    const hazards = ev.filter((e) => e.t === "hazard");
+    const q = { Excellent: 0, Good: 0, Fair: 0, Rough: 0 };
+    dels.forEach((d) => { q[d.quality] = (q[d.quality] || 0) + 1; });
+    const half = Math.floor(dels.length / 2);
+    const avg = (a) => (a.length ? a.reduce((x, d) => x + (d.mistakes || 0), 0) / a.length : null);
+    const early = avg(dels.slice(0, Math.max(1, half))), late = dels.length >= 3 ? avg(dels.slice(half)) : null;
+    const cats = {};
+    quizzes.forEach((x) => { const c = cats[x.cat] || (cats[x.cat] = { ok: 0, n: 0 }); c.n++; if (x.ok) c.ok++; });
+    const safety = s.safety || {};
+    const permits = PERMITS.map((p) => { const r = safety[p.id] || {}; return { id: p.id, name: p.name, icon: p.icon, att: r.att || 0, best: r.best || 0, passed: !!r.passed }; });
+    const noPermit = hazards.filter((h) => h.type === "no_permit");
+    const quizOk = quizzes.filter((x) => x.ok).length;
+    const measureFound = Object.keys(s.measured || {}).length;
+    const builds = ev.filter((e) => e.t === "build");
+    const repairIds = Object.keys((window.ACM && ACM.REPAIRS) || {});
+    const done = Array.isArray(s.completedProjectIds) ? s.completedProjectIds : [];
+    const repairs = repairIds.filter((id) => done.includes(id));
+    const ws = s.workshop || {};
+    const bays = (ws.west ? 1 : 0) + (ws.east ? 1 : 0);
+    const pending = Array.isArray(s.products) ? s.products.length : 0;
+    const safetyEv = ev.filter((e) => e.t === "safety");
+    const lastSafety = {};
+    safetyEv.forEach((e) => { lastSafety[e.id] = e; });
+    const perDay = {};
+    ev.forEach((e) => { perDay[e.d] = (perDay[e.d] || 0) + 1; });
+    const dl = (s.drafting && s.drafting.lessons) || {};
+    const lessonsDone = Object.values(dl).filter((x) => x && x.done).length;
+    const lessonTries = Object.values(dl).reduce((x, r) => x + ((r && r.att) || 0), 0);
+    const designEv = ev.filter((e) => e.t === "design");
+    const planAcc = designEv.length ? designEv.reduce((x, e) => x + (e.total ? e.ok / e.total : 0), 0) / designEv.length : null;
+    const a = {
+      lessonsDone, lessonTries, designs: designEv.length, planAcc,
+      builds: builds.length, pending, repairs, repairTotal: repairIds.length, bays, safetyEv, lastSafety, quizEv: quizzes, perDay,
+      name: s.shopName || "?", days: s.dayCount || 0, stars: Number(s.stars) || 0, cash: Math.round(s.cash || 0), tier: s.certifiedTier || 1,
+      delivered: dels.length, q, early, late, dels,
+      quizN: quizzes.length, quizOk, quizPct: quizzes.length ? quizOk / quizzes.length : null, cats,
+      examsTaken: exams.length, examsPassed: exams.filter((e) => e.pass).length,
+      permits, permitsPassed: permits.filter((p) => p.passed).length, permitAttempts: permits.reduce((x, p) => x + p.att, 0),
+      measureOk: meas.filter((m) => m.ok).length, measureTries: meas.length, measureFound,
+      story: (s.story && s.story.stage) || 0, noPermit: noPermit.length, hazards: hazards.length,
+      felled: (s.stats && s.stats.felled) || 0, planted: (s.stats && s.stats.planted) || 0, refused: (s.stats && s.stats.refused) || 0,
+      raw: ev, updated: s._updated || null, eventCount: ev.length
+    };
+    a.flags = flagsFor(a);
+    return a;
+  }
+
+  function flagsFor(a) {
+    const f = [];
+    if (a.quizN >= 10 && a.quizPct < 0.6) f.push("Low quiz accuracy");
+    if (a.noPermit >= 3) f.push("Tries machines without permits");
+    if (a.late != null && a.early != null && a.late > a.early + 0.5) f.push("Mistakes rising");
+    if (a.pending >= 2) f.push(a.pending + " projects waiting to be handed over");
+    if (a.days >= 4 && a.delivered === 0) f.push("No finished work yet");
+    PERMITS.forEach(() => {});
+    const stuck = a.permits.filter((p) => p.att >= 4 && !p.passed);
+    if (stuck.length) f.push("Stuck on " + stuck.map((p) => p.name).join(", "));
+    if (a.examsTaken >= 3 && a.examsPassed === 0) f.push("Failing certification exams");
+    return f;
+  }
+
+  const pct = (x) => (x == null ? "—" : Math.round(x * 100) + "%");
+  const f1 = (x) => (x == null ? "—" : x.toFixed(1));
+  function ago(iso) {
+    if (!iso) return "—";
+    const m = (Date.now() - new Date(iso).getTime()) / 60000;
+    if (m < 2) return "just now"; if (m < 90) return Math.round(m) + " min ago";
+    if (m < 60 * 36) return Math.round(m / 60) + " h ago"; return Math.round(m / 1440) + " d ago";
+  }
+  function trend(a) {
+    if (a.late == null || a.early == null) return '<span class="note">too early</span>';
+    const d = a.late - a.early;
+    if (d < -0.3) return `<span class="good">${f1(a.early)} → ${f1(a.late)} ▼</span>`;
+    if (d > 0.5) return `<span class="bad">${f1(a.early)} → ${f1(a.late)} ▲</span>`;
+    return `<span class="warn">${f1(a.early)} → ${f1(a.late)} ■</span>`;
+  }
+
+  const COLS = [
+    ["name", "Student", (a) => `<strong>${esc(a.name)}</strong>`, (a) => a.name.toLowerCase()],
+    ["updated", "Last saved", (a) => ago(a.updated), (a) => (a.updated ? new Date(a.updated).getTime() : 0)],
+    ["days", "Days", (a) => a.days, (a) => a.days],
+    ["stars", "Stars", (a) => "★ " + a.stars.toFixed(2), (a) => a.stars],
+    ["tier", "Tier", (a) => "T" + a.tier, (a) => a.tier],
+    ["delivered", "Delivered", (a) => `${a.delivered} <span class="note">(${a.q.Excellent}E ${a.q.Good}G ${a.q.Fair}F${a.q.Rough ? " " + a.q.Rough + "R" : ""})</span>`, (a) => a.delivered],
+    ["trend", "Mistakes early→recent", trend, (a) => (a.late != null && a.early != null ? a.late - a.early : 99)],
+    ["quiz", "Quiz accuracy", (a) => (a.quizN ? `<span class="barbg"><span class="bar" style="width:${Math.round(a.quizPct * 70)}px"></span></span>${pct(a.quizPct)} <span class="note">(${a.quizN})</span>` : "—"), (a) => (a.quizPct == null ? -1 : a.quizPct)],
+    ["permits", "Permits", (a) => `${a.permitsPassed}/${a.permits.length}`, (a) => a.permitsPassed],
+    ["measure", "Measuring", (a) => `${a.measureOk}/${a.measureTries}`, (a) => a.measureOk],
+    ["pending", "Built / handed over", (a) => `${a.builds} / ${a.delivered}${a.pending ? ` <span class="pill warn">${a.pending} waiting</span>` : ""}`, (a) => a.pending],
+    ["repairs", "Village repairs", (a) => `${a.repairs.length}/${a.repairTotal}`, (a) => a.repairs.length],
+    ["bays", "Workshop bays", (a) => `${a.bays}/2`, (a) => a.bays],
+    ["draft", "Drafting", (a) => `${a.lessonsDone}/4 lessons${a.designs ? ` · ${a.designs} design${a.designs === 1 ? "" : "s"} (${pct(a.planAcc)} accurate)` : ""}`, (a) => a.lessonsDone * 100 + a.designs],
+    ["story", "Story", (a) => `${a.story}/${STORY_TOTAL}`, (a) => a.story],
+    ["flags", "Attention", (a) => (a.flags.length ? `<span class="pill flag">${a.flags.length}</span>` : '<span class="good">✓</span>'), (a) => a.flags.length]
+  ];
+
+  function render() {
+    const n = students.length || 1;
+    const mean = (f) => students.reduce((x, s) => x + f(s), 0) / n;
+    const qs = students.filter((s) => s.quizPct != null);
+    $("tiles").innerHTML = [
+      ["Students", students.length],
+      ["Avg stars", "★ " + mean((s) => s.stars).toFixed(2)],
+      ["Avg quiz accuracy", qs.length ? pct(qs.reduce((x, s) => x + s.quizPct, 0) / qs.length) : "—"],
+      ["Avg permits", mean((s) => s.permitsPassed).toFixed(1) + "/" + PERMITS.length],
+      ["Commissions delivered", students.reduce((x, s) => x + s.delivered, 0)],
+      ["Need attention", students.filter((s) => s.flags.length).length]
+    ].map(([l, v]) => `<div class="card tile"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
+
+    const att = students.filter((s) => s.flags.length);
+    $("attention").innerHTML = att.length
+      ? `<strong>Worth a conversation</strong><div style="margin-top:6px">${att.map((s) => `<div class="row"><span><strong>${esc(s.name)}</strong></span><span>${s.flags.map((f) => `<span class="pill flag">${esc(f)}</span>`).join("")}</span></div>`).join("")}</div>`
+      : `<strong>Worth a conversation</strong><p class="note" style="margin:6px 0 0">Nobody is flagged right now. Flags appear for low quiz accuracy, machines used without permits, rising mistakes, no finished work, or being stuck on a permit test.</p>`;
+
+    $("tbl").querySelector("thead").innerHTML = "<tr>" + COLS.map((c) => `<th data-k="${c[0]}" class="${c[0] === sortKey ? "sorted" : ""} ${sortAsc ? "asc" : ""}">${c[1]}</th>`).join("") + "</tr>";
+    const col = COLS.find((c) => c[0] === sortKey) || COLS[0];
+    const fil = $("filter").value.trim().toLowerCase();
+    const rows = students.filter((s) => !fil || s.name.toLowerCase().includes(fil)).sort((a, b) => {
+      const x = col[3](a), y = col[3](b); return (x < y ? -1 : x > y ? 1 : 0) * (sortAsc ? 1 : -1);
+    });
+    $("tbl").querySelector("tbody").innerHTML = rows.map((s) => `<tr data-n="${esc(s.name)}" class="${selected === s.name ? "sel" : ""}">${COLS.map((c) => `<td>${c[2](s)}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${COLS.length}" class="note">No saved workshops for this class code yet.</td></tr>`;
+    renderDetail();
+    renderItems();
+  }
+
+  function itemRows(map, textOf, minN) {
+    return Object.entries(map).filter(([, v]) => v.n >= minN && v.miss > 0).map(([k, v]) => ({ k, n: v.n, miss: v.miss, rate: v.miss / v.n, who: v.who }))
+      .sort((a, b) => b.rate - a.rate || b.n - a.n).slice(0, 10)
+      .map((r) => `<div class="row" style="align-items:flex-start"><span style="white-space:normal;max-width:78%">${esc(textOf(r.k))}</span><span class="${r.rate >= 0.5 ? "bad" : r.rate >= 0.3 ? "warn" : ""}" title="${esc([...r.who].join(", "))}">${r.miss}/${r.n} missed · ${pct(r.rate)}</span></div>`).join("") || '<span class="note">Not enough answers yet.</span>';
+  }
+  function renderItems() {
+    const safeText = {}; PERMITS.forEach((p) => p.q.forEach((q, i) => { safeText[p.id + "#" + i] = p.name + ": " + q[0]; }));
+    const sm = {};
+    students.forEach((s) => s.safetyEv.forEach((e) => {
+      const g = (PERMITS.find((p) => p.id === e.id) || { q: [] }).q;
+      const missed = e.missed || [];
+      g.forEach((q, i) => {
+        if (q[2]) return; // unconfirmed answer: not graded, so not counted
+        const k = e.id + "#" + i, r = sm[k] || (sm[k] = { n: 0, miss: 0, who: new Set() });
+        r.n++; if (missed.includes(i)) { r.miss++; r.who.add(s.name); }
+      });
+    }));
+    const qm = {}, qText = {};
+    ((window.ACM && ACM.QUESTIONS) || []).forEach((q) => { qText[q.id] = `[T${q.tier} · ${q.category}] ${q.prompt}`; });
+    students.forEach((s) => s.quizEv.forEach((e) => { const r = qm[e.q] || (qm[e.q] = { n: 0, miss: 0, who: new Set() }); r.n++; if (!e.ok) { r.miss++; r.who.add(s.name); } }));
+    const days = {}; students.forEach((s) => Object.entries(s.perDay).forEach(([d, c]) => { days[d] = (days[d] || 0) + c; }));
+    const dk = Object.keys(days).map(Number).sort((a, b) => a - b);
+    const mx = Math.max(1, ...dk.map((d) => days[d]));
+    const act = dk.length ? `<svg viewBox="0 0 ${dk.length * 14 + 4} 60" width="100%" height="60" role="img" aria-label="Logged actions per game day">${dk.map((d, i) => { const h = Math.max(2, days[d] / mx * 52); return `<rect x="${2 + i * 14}" y="${58 - h}" width="11" height="${h}" rx="1.5" fill="var(--accent)"><title>Game day ${d}: ${days[d]} actions</title></rect>`; }).join("")}</svg><div class="note">Logged actions per game day, whole class</div>` : '<span class="note">No activity yet.</span>';
+    const stale = students.filter((s) => !s.updated || Date.now() - new Date(s.updated).getTime() > 7 * 864e5).map((s) => esc(s.name));
+    $("items").innerHTML = `
+      <div class="card"><h3>Most-missed safety questions (class-wide)</h3>${itemRows(sm, (k) => safeText[k] || k, 2)}<p class="note">Hover a rate to see who missed it. Needs 2+ attempts. Questions with unconfirmed answers are excluded.</p></div>
+      <div class="card"><h3>Most-missed quiz questions (class-wide)</h3>${itemRows(qm, (k) => qText[k] || k, 2)}</div>
+      <div class="card"><h3>Class activity</h3>${act}<div class="row" style="margin-top:8px"><span>Not saved in 7+ days</span><span>${stale.join(", ") || "—"}</span></div></div>`;
+  }
+
+  function spark(vals) {
+    if (!vals.length) return '<span class="note">No deliveries yet.</span>';
+    const w = 280, h = 60, max = Math.max(3, ...vals), bw = Math.max(3, Math.min(18, (w - 4) / vals.length - 2));
+    const bars = vals.map((v, i) => { const bh = Math.max(2, (v / max) * (h - 8)); const x = 2 + i * (bw + 2); const c = v === 0 ? "var(--good)" : v <= 2 ? "var(--accent)" : v <= 4 ? "var(--warn)" : "var(--bad)"; return `<rect x="${x}" y="${h - bh}" width="${bw}" height="${bh}" rx="1.5" fill="${c}"><title>Delivery ${i + 1}: ${v} mistake${v === 1 ? "" : "s"}</title></rect>`; }).join("");
+    return `<svg viewBox="0 0 ${Math.max(w, 4 + vals.length * (bw + 2))} ${h}" width="100%" height="${h}" role="img" aria-label="Mistakes per delivery, oldest to newest">${bars}</svg><div class="note">Mistakes per delivery, oldest → newest (shorter is better)</div>`;
+  }
+
+  function lastMiss(s) {
+    const out = Object.values(s.lastSafety).filter((e) => !e.ok && (e.missed || []).length).map((e) => {
+      const p = PERMITS.find((x) => x.id === e.id); if (!p) return "";
+      return `<div class="note" style="margin-top:6px"><strong>${esc(p.name)}</strong> last attempt (${e.pct}%), missed:<br>${e.missed.map((i) => "• " + esc((p.q[i] || [""])[0])).join("<br>")}</div>`;
+    }).join("");
+    return out ? `<div style="margin-top:8px"><strong>Still to review</strong>${out}</div>` : "";
+  }
+  function renderDetail() {
+    const s = students.find((x) => x.name === selected);
+    if (!s) { $("detail").innerHTML = '<p class="note">Select a student above to see their detail.</p>'; return; }
+    const catRows = Object.entries(s.cats).sort((a, b) => a[1].ok / a[1].n - b[1].ok / b[1].n).map(([c, v]) => `<div class="row"><span>${esc(c)}</span><span class="${v.ok / v.n < 0.6 ? "bad" : ""}">${v.ok}/${v.n} · ${pct(v.ok / v.n)}</span></div>`).join("") || '<span class="note">No quiz answers yet.</span>';
+    const permRows = s.permits.map((p) => `<div class="row"><span>${p.icon || ""} ${esc(p.name)}</span><span class="${p.passed ? "good" : p.att ? "warn" : "note"}">${p.passed ? "✓ passed" : p.att ? "not yet" : "not tried"} · ${p.att} attempt${p.att === 1 ? "" : "s"}${p.best ? " · best " + p.best : ""}</span></div>`).join("");
+    $("detail").innerHTML = `
+      <div class="card"><h3>${esc(s.name)} — work quality</h3>${spark(s.dels.map((d) => d.mistakes || 0))}
+        <div class="row" style="margin-top:8px"><span>Excellent / Good / Fair / Rough</span><span>${s.q.Excellent} / ${s.q.Good} / ${s.q.Fair} / ${s.q.Rough}</span></div>
+        <div class="row"><span>Commissions sent back to remake</span><span>${s.refused}</span></div>
+        <div class="row"><span>Machine use without a permit</span><span class="${s.noPermit ? "bad" : ""}">${s.noPermit}</span></div>
+        <div class="row"><span>Certification exams passed</span><span>${s.examsPassed}/${s.examsTaken}</span></div></div>
+      <div class="card"><h3>Quiz accuracy by topic (weakest first)</h3>${catRows}</div>
+      <div class="card"><h3>Safety permits</h3>${permRows}${lastMiss(s)}</div>
+      <div class="card"><h3>Habits &amp; story</h3>
+        <div class="row"><span>Measuring &amp; squaring correct</span><span>${s.measureOk}/${s.measureTries} · ${s.measureFound}/${MEASURE_TOTAL} spots</span></div>
+        <div class="row"><span>Trees felled / planted</span><span>${s.felled} / ${s.planted}</span></div>
+        <div class="row"><span>Story chapter</span><span>${s.story}/${STORY_TOTAL}</span></div>
+        <div class="row"><span>Projects built / handed over</span><span>${s.builds} / ${s.delivered}${s.pending ? " · " + s.pending + " waiting" : ""}</span></div>
+        <div class="row"><span>Drafting lessons · designs · plan accuracy</span><span>${s.lessonsDone}/4 (${s.lessonTries} tries) · ${s.designs} · ${pct(s.planAcc)}</span></div>
+        <div class="row"><span>Village repairs</span><span>${s.repairs.length}/${s.repairTotal}</span></div>
+        <div class="row"><span>Workshop bays added</span><span>${s.bays}/2</span></div>
+        <div class="row"><span>Game days played</span><span>${s.days}</span></div>
+        <div class="row"><span>Logged events (latest 600 kept)</span><span>${s.eventCount}</span></div>
+        <div style="margin-top:8px">${s.flags.map((f) => `<span class="pill flag">${esc(f)}</span>`).join("") || '<span class="good">No flags</span>'}</div></div>`;
+  }
+
+  async function load() {
+    $("src").textContent = "Loading…";
+    const res = await ACM.CloudSync.fetchClassSaves(CLASS);
+    students = res.saves.map(analyse);
+    mode = res.mode;
+    $("src").textContent = (res.mode === "cloud" ? "Live from the class cloud" : "From saves on THIS device only") + (res.warning ? ` (${res.warning})` : "") + " · " + new Date().toLocaleTimeString();
+    render();
+  }
+
+  function csv() {
+    const head = ["student", "last_saved", "days", "stars", "tier", "delivered", "excellent", "good", "fair", "rough", "mistakes_early", "mistakes_recent", "quiz_answered", "quiz_correct", "permits_passed", "permit_attempts", "measure_ok", "measure_tries", "story_stage", "no_permit_events", "built", "pending_handover", "repairs", "bays", "draft_lessons", "designs", "plan_accuracy", "flags"];
+    const rows = students.map((s) => [s.name, s.updated || "", s.days, s.stars.toFixed(2), s.tier, s.delivered, s.q.Excellent, s.q.Good, s.q.Fair, s.q.Rough, s.early == null ? "" : s.early.toFixed(2), s.late == null ? "" : s.late.toFixed(2), s.quizN, s.quizOk, s.permitsPassed, s.permitAttempts, s.measureOk, s.measureTries, s.story, s.noPermit, s.builds, s.pending, s.repairs.length, s.bays, s.lessonsDone, s.designs, s.planAcc == null ? "" : s.planAcc.toFixed(2), s.flags.join("; ")]);
+    const text = [head, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" })); a.download = `${CLASS}_class_report.csv`; a.click();
+  }
+
+  function eventsCsv() {
+    const rows = [];
+    students.forEach((s) => (s.raw || []).forEach((e) => { const { t, d, m, ...rest } = e; rows.push([s.name, d, m, t, JSON.stringify(rest)]); }));
+    const text = [["student", "game_day", "minute", "event", "details_json"], ...rows].map((r) => r.map((c) => `"${String(c == null ? "" : c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" })); a.download = `${CLASS}_events.csv`; a.click();
+  }
+
+  async function login() {
+    $("err").textContent = ""; $("go").disabled = true;
+    const r = await ACM.CloudSync.teacherLogin($("code").value, $("pin").value);
+    $("go").disabled = false;
+    if (!r.ok) { $("err").textContent = r.error; return; }
+    CLASS = $("code").value.toUpperCase().trim();
+    $("login").classList.add("hidden"); $("dash").classList.remove("hidden");
+    ["btn-refresh", "btn-csv", "btn-ev", "btn-out"].forEach((i) => $(i).classList.remove("hidden"));
+    $("who").textContent = "Class " + CLASS + (r.created ? " (teacher PIN set)" : "");
+    await load();
+  }
+
+  $("go").onclick = login;
+  $("pin").onkeydown = (e) => { if (e.key === "Enter") login(); };
+  $("btn-refresh").onclick = load;
+  $("btn-csv").onclick = csv;
+  $("btn-ev").onclick = eventsCsv;
+  $("btn-out").onclick = () => location.reload();
+  $("filter").oninput = render;
+  $("tbl").addEventListener("click", (e) => {
+    const th = e.target.closest("th"); if (th) { const k = th.dataset.k; if (k === sortKey) sortAsc = !sortAsc; else { sortKey = k; sortAsc = k === "name"; } render(); return; }
+    const tr = e.target.closest("tbody tr"); if (tr && tr.dataset.n) { selected = tr.dataset.n; render(); }
+  });
+  $("mode").textContent = ACM.CloudSync && /disabled/.test("") ? "" : "";
+  window._dash = { analyse };
+})();
+</script>
+</body>
+</html>
