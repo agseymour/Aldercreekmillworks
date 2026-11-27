@@ -16,7 +16,6 @@ ACM.Game = (function () {
       [130, 855], [220, 855], [310, 855], [400, 855]
     ];
     return coords.map(([x, y], idx) => {
-      // Start with 2 mature White Pines ready to harvest and 10 open planting plots
       if (idx < 2) {
         return {
           plotIndex: idx,
@@ -112,7 +111,6 @@ ACM.Game = (function () {
     const options = WEATHER_BY_SEASON[state.season] || ["Sunny"];
     state.weather = options[Math.floor(Math.random() * options.length)];
 
-    // Grow all planted trees by 1 day
     let maturedCount = 0;
     (state.trees || []).forEach((t) => {
       if (t && t.stage < 2) {
@@ -184,6 +182,7 @@ ACM.Game = (function () {
   }
 
   function openModal(title, bodyHtml) {
+    if (ACM.World && ACM.World.clearKeys) ACM.World.clearKeys();
     document.getElementById("modal-title").textContent = title;
     document.getElementById("modal-body").innerHTML = bodyHtml;
     document.getElementById("modal-overlay").classList.remove("hidden");
@@ -191,6 +190,12 @@ ACM.Game = (function () {
 
   function closeModal() {
     document.getElementById("modal-overlay").classList.add("hidden");
+    if (ACM.World) {
+      if (ACM.World.clearKeys) ACM.World.clearKeys();
+      if (ACM.World.focusGameCanvas) {
+        ACM.World.focusGameCanvas(document.getElementById("game-canvas"));
+      }
+    }
   }
 
   // --- SEYMOUR'S HARDWARE & TOOL SHOP ---
@@ -766,7 +771,6 @@ ACM.Game = (function () {
 
   function migrateLoadedState(loaded) {
     Object.assign(state, loaded);
-    // Ensure backwards compatibility if loading an older save
     if (!Array.isArray(state.trees) || state.trees.length !== 12) {
       state.trees = createStarterTrees();
     }
@@ -844,6 +848,10 @@ ACM.Game = (function () {
       document.getElementById("creator-modal").classList.add("hidden");
       updateHUD();
       startBtn.disabled = false;
+
+      if (ACM.World && ACM.World.focusGameCanvas) {
+        ACM.World.focusGameCanvas(document.getElementById("game-canvas"));
+      }
     };
 
     const previewCanvas = document.getElementById("preview-canvas");
@@ -878,6 +886,12 @@ ACM.Game = (function () {
     ACM.World.init(canvas, (sid) => handleStationInteract.call(ACM.Game, sid));
 
     document.getElementById("modal-close").onclick = closeModal;
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !document.getElementById("modal-overlay").classList.contains("hidden")) {
+        closeModal();
+      }
+    });
+
     document.getElementById("btn-story").onclick = openTownBoard;
     document.getElementById("btn-inventory").onclick = openInventoryModal;
     document.getElementById("btn-leaderboard").onclick = openLeaderboardModal;
@@ -911,7 +925,7 @@ ACM.Game = (function () {
         interactBtn.disabled = false;
         interactBtn.textContent = `Open ${st.shortLabel} [E]`;
       } else {
-        hintEl.textContent = "Walk with WASD / Arrow Keys or click anywhere to explore Alder Creek.";
+        hintEl.textContent = "Walk with WASD / Arrow Keys, use the D-Pad, or click anywhere to move.";
         interactBtn.disabled = true;
         interactBtn.textContent = "Walk to a Building";
       }
