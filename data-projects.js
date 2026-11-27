@@ -1,58 +1,78 @@
 window.ACM = window.ACM || {};
 
-ACM.STORY_ACTS = [
+ACM.HOME_STAGES = [
   {
-    act: 1,
-    title: "Act I: Sweeping Out the Sawdust",
-    requiredStars: 1.0,
-    anchorId: "anchor_1_kiosk",
-    mentorNote: "Arthur: 'Welcome to Alder Creek. Start with the basics—measure twice, wear your safety glasses, and prove to the town you can cut straight.'",
-    summary: "Earn startup cash at the Blueprint Desk, equip basic hand tools, and build the Trailhead Kiosk for Ranger MacLeod."
+    stage: 1,
+    name: "Stone Foundation & Timber Sill",
+    cashCost: 75,
+    lumberId: "spf_s4s",
+    lumberUnits: 4,
+    requiredTool: "framing_square",
+    desc: "Square the perimeter with your Framing Square and lay pressure-treated sills."
   },
   {
-    act: 2,
-    title: "Act II: Word Around Town",
-    requiredStars: 2.0,
-    anchorId: "anchor_2_cafe",
-    mentorNote: "Arthur: 'Shopkeepers are asking for cleaner mitres and stronger joints. Time to invest in a mitre saw and a rigid back saw.'",
-    summary: "Pass the Tier 2 Certification Exam and build Clara's Harbor Café Pastry Display with 45° mitres to 1/16\" tolerance."
+    stage: 2,
+    name: "Post-and-Beam Framing & Plank Walls",
+    cashCost: 160,
+    lumberId: "pine_s4s",
+    lumberUnits: 6,
+    requiredTool: "crosscut_saw",
+    desc: "Raise heavy White Pine wall studs, headers, and rough plank sheathing."
   },
   {
-    act: 3,
-    title: "Act III: Going Commercial",
-    requiredStars: 3.0,
-    anchorId: "anchor_3_square",
-    mentorNote: "Arthur: 'Buying S4S lumber eats your profit. Outfit the shop with a jointer, planer, and table saw—and don't skip the fire extinguisher!'",
-    summary: "Mill rough-sawn lumber in proper S4S sequence and construct the Town Square Bench."
+    stage: 3,
+    name: "Cedar Shingle Roof & Front Porch",
+    cashCost: 290,
+    lumberId: "cedar_s4s",
+    lumberUnits: 6,
+    requiredTool: "mitre_saw",
+    desc: "Cut angled rafters and weatherproof the roof with aromatic Red Cedar shingles."
   },
   {
-    act: 4,
-    title: "Act IV: The Heritage Restoration",
-    requiredStars: 4.0,
-    anchorId: "anchor_4_lighthouse",
-    mentorNote: "Arthur: 'The Historical Society wants curved boat-rib bracing and mortise-and-tenon joinery that handles coastal humidity.'",
-    summary: "Use the band saw and framing square to craft the Alder Creek Lighthouse Archival Table."
+    stage: 4,
+    name: "Hardwood Floors, Windows & Stone Hearth",
+    cashCost: 480,
+    lumberId: "hard_maple_rough",
+    lumberUnits: 8,
+    requiredTool: "planer",
+    desc: "Mill tongue-and-groove Maple floorboards and trim out sunny multi-pane windows."
   },
   {
-    act: 5,
-    title: "Act V: The Centennial Masterpiece",
-    requiredStars: 5.0,
-    anchorId: "anchor_5_centennial",
-    mentorNote: "Arthur: 'The whole town is watching Centennial Hall. Break out the Japanese pull saw and hold 1/64\" tolerances.'",
-    summary: "Build the Centennial Hall Heirloom Display Case & Lectern to cement your shop's legacy."
+    stage: 5,
+    name: "Master Craftsman's Veranda & Conservatory",
+    cashCost: 820,
+    lumberId: "walnut_rough",
+    lumberUnits: 8,
+    requiredTool: "band_saw",
+    desc: "Complete your dream homestead with curved Walnut brackets (+15% bonus on all future payouts!)."
   }
 ];
 
 ACM.PROJECTS = [
-  // --- ACT I ---
+  // --- TIER 1 COMMISSIONS (BIRDHOUSE IS FIRST!) ---
+  {
+    id: "side_1_birdhouse",
+    title: "Classic Songbird House",
+    client: "Mrs. Gable (Orchard Neighbor)",
+    tier: 1,
+    desc: "A sloped-roof backyard chickadee house with drainage holes. You already have all the tools and pine boards needed to build this!",
+    lumberReq: { allowedIds: ["pine_s4s", "cedar_s4s", "spf_s4s"], preferredId: "cedar_s4s", units: 2 },
+    precisionDenom: 8,
+    cuts: [
+      { part: "Back Mounting Board", target: 11.5, display: "11 1/2\"" },
+      { part: "Sloped Roof Panel", target: 7.25, display: "7 1/4\"" }
+    ],
+    workflow: ["tape_measure", "framing_square", "crosscut_saw", "hammer"],
+    requiresPilotHole: false,
+    basePay: 65,
+    starGain: 0.3
+  },
   {
     id: "side_1_tote",
     title: "Apprentice Carpenter's Tool Tote",
-    client: "Mateo (Local Grocer)",
+    client: "Mateo (Village Grocer)",
     tier: 1,
-    isAnchor: false,
-    actNumber: 1,
-    desc: "A sturdy pine carry tote for hand tools. Requires clean 90° crosscuts and nailed butt joints.",
+    desc: "A sturdy pine carry tote for hand tools with a comfortable dowel handle and nailed butt joints.",
     lumberReq: { allowedIds: ["pine_s4s", "spf_s4s", "cedar_s4s"], units: 2 },
     precisionDenom: 8,
     cuts: [
@@ -61,17 +81,32 @@ ACM.PROJECTS = [
     ],
     workflow: ["tape_measure", "framing_square", "crosscut_saw", "hammer"],
     requiresPilotHole: false,
-    basePay: 65,
+    basePay: 75,
     starGain: 0.25
   },
   {
+    id: "side_1_planter",
+    title: "Cedar Herb & Strawberry Planter Box",
+    client: "Clara (Harbor Café)",
+    tier: 1,
+    desc: "Raised patio planter box for fresh café herbs. Rot-resistant cedar and clean 90° crosscuts required.",
+    lumberReq: { allowedIds: ["cedar_s4s", "spf_s4s", "pine_s4s"], preferredId: "cedar_s4s", units: 3 },
+    precisionDenom: 8,
+    cuts: [
+      { part: "Long Side Slats", target: 22.375, display: "22 3/8\"" },
+      { part: "Corner Post", target: 14.125, display: "14 1/8\"" }
+    ],
+    workflow: ["tape_measure", "framing_square", "crosscut_saw", "hammer"],
+    requiresPilotHole: false,
+    basePay: 95,
+    starGain: 0.3
+  },
+  {
     id: "anchor_1_kiosk",
-    title: "Trailhead Information Kiosk",
+    title: "Cape Split Trailhead Map Kiosk",
     client: "Ranger MacLeod (Parks)",
     tier: 1,
-    isAnchor: true,
-    actNumber: 1,
-    desc: "Outdoor trail map frame for Cape Split trailhead. Must withstand coastal rain and hold 1/8\" layout accuracy.",
+    desc: "Outdoor trail map frame for Cape Split trailhead. Requires pilot holes so screws don't split the posts.",
     lumberReq: { allowedIds: ["cedar_s4s", "spf_s4s", "pine_s4s"], preferredId: "cedar_s4s", units: 3 },
     precisionDenom: 8,
     cuts: [
@@ -80,8 +115,8 @@ ACM.PROJECTS = [
     ],
     workflow: ["tape_measure", "framing_square", "crosscut_saw", "cordless_drill", "screwdriver"],
     requiresPilotHole: true,
-    basePay: 120,
-    starGain: 0.55,
+    basePay: 135,
+    starGain: 0.45,
     choice: {
       prompt: "Ranger MacLeod asks how you sealed the joints against Bay of Fundy fog:",
       optionA: {
@@ -99,14 +134,12 @@ ACM.PROJECTS = [
     }
   },
 
-  // --- ACT II ---
+  // --- TIER 2 COMMISSIONS ---
   {
     id: "side_2_frames",
     title: "45° Mitred Gallery Picture Frames",
     client: "Clara (Harbor Café)",
     tier: 2,
-    isAnchor: false,
-    actNumber: 2,
     desc: "Set of oak display frames for local photography. Demands crisp 45° mitres and 1/16\" accuracy.",
     lumberReq: { allowedIds: ["red_oak_s4s", "poplar_s4s"], units: 2 },
     precisionDenom: 16,
@@ -116,17 +149,32 @@ ACM.PROJECTS = [
     ],
     workflow: ["tape_measure", "mitre_saw", "back_saw", "hammer"],
     requiresPilotHole: false,
-    basePay: 145,
+    basePay: 155,
     starGain: 0.3
+  },
+  {
+    id: "side_2_bookshelf",
+    title: "3-Tier Cottage Bookcase",
+    client: "Dr. Alverez (Schoolhouse)",
+    tier: 2,
+    desc: "Compact classroom reading shelf built from Poplar or Baltic Birch plywood.",
+    lumberReq: { allowedIds: ["poplar_s4s", "birch_ply", "red_oak_s4s"], units: 3 },
+    precisionDenom: 16,
+    cuts: [
+      { part: "Vertical Side Gable", target: 32.1875, display: "32 3/16\"" },
+      { part: "Fixed Shelf", target: 23.8125, display: "23 13/16\"" }
+    ],
+    workflow: ["tape_measure", "framing_square", "mitre_saw", "cordless_drill", "screwdriver"],
+    requiresPilotHole: true,
+    basePay: 185,
+    starGain: 0.35
   },
   {
     id: "anchor_2_cafe",
     title: "Harbor Café Pastry & Merch Shelving",
     client: "Clara (Harbor Café)",
     tier: 2,
-    isAnchor: true,
-    actNumber: 2,
-    desc: "Wall-mounted Baltic Birch and Oak display rack. Requires mitre cuts, back-saw shoulder joinery, and square assembly.",
+    desc: "Wall-mounted Baltic Birch and Oak display rack with back-saw shoulder joinery and square carcass assembly.",
     lumberReq: { allowedIds: ["birch_ply", "red_oak_s4s"], preferredId: "birch_ply", units: 3 },
     precisionDenom: 16,
     cuts: [
@@ -135,8 +183,8 @@ ACM.PROJECTS = [
     ],
     workflow: ["tape_measure", "framing_square", "mitre_saw", "back_saw", "cordless_drill", "screwdriver"],
     requiresPilotHole: true,
-    basePay: 240,
-    starGain: 0.6,
+    basePay: 250,
+    starGain: 0.5,
     choice: {
       prompt: "Clara offers a $50 rush bonus if you deliver tonight—skipping final hand-sanding:",
       optionA: {
@@ -154,14 +202,12 @@ ACM.PROJECTS = [
     }
   },
 
-  // --- ACT III ---
+  // --- TIER 3 COMMISSIONS ---
   {
     id: "side_3_butcher",
     title: "Hard Maple Edge-Grain Prep Block",
     client: "Harbor Bistro",
     tier: 3,
-    isAnchor: false,
-    actNumber: 3,
     desc: "Mill rough-sawn Hard Maple into flat, square strips and rip to exact width on the table saw.",
     lumberReq: { allowedIds: ["hard_maple_rough"], units: 3 },
     precisionDenom: 16,
@@ -171,16 +217,31 @@ ACM.PROJECTS = [
     ],
     workflow: ["tape_measure", "jointer", "planer", "table_saw", "mitre_saw"],
     requiresPilotHole: false,
-    basePay: 310,
+    basePay: 320,
     starGain: 0.35
+  },
+  {
+    id: "side_3_nightstand",
+    title: "Shaker Cherry Bedside Table",
+    client: "Seymour (Hardware Shop)",
+    tier: 3,
+    desc: "Seymour wants a solid Black Cherry nightstand with dadoed drawer runners and tapered legs.",
+    lumberReq: { allowedIds: ["cherry_rough", "hard_maple_rough"], preferredId: "cherry_rough", units: 4 },
+    precisionDenom: 16,
+    cuts: [
+      { part: "Tabletop Plank", target: 20.375, display: "20 3/8\"" },
+      { part: "Drawer Front", target: 14.625, display: "14 5/8\"" }
+    ],
+    workflow: ["tape_measure", "framing_square", "jointer", "planer", "table_saw", "mitre_saw", "cordless_drill"],
+    requiresPilotHole: true,
+    basePay: 380,
+    starGain: 0.4
   },
   {
     id: "anchor_3_square",
     title: "Town Square Commemorative Bench",
     client: "Alder Creek Council",
     tier: 3,
-    isAnchor: true,
-    actNumber: 3,
     desc: "Heavy-duty public bench milled from rough Cherry or Reclaimed Hemlock. Full S4S milling and table saw ripping required.",
     lumberReq: { allowedIds: ["cherry_rough", "reclaimed_barn", "hard_maple_rough"], units: 4 },
     precisionDenom: 16,
@@ -190,8 +251,8 @@ ACM.PROJECTS = [
     ],
     workflow: ["tape_measure", "framing_square", "jointer", "planer", "table_saw", "mitre_saw", "cordless_drill"],
     requiresPilotHole: true,
-    basePay: 420,
-    starGain: 0.65,
+    basePay: 440,
+    starGain: 0.55,
     choice: {
       prompt: "The Town Council asks you to engrave the town crest on the backrest:",
       optionA: {
@@ -209,14 +270,12 @@ ACM.PROJECTS = [
     }
   },
 
-  // --- ACT IV ---
+  // --- TIER 4 COMMISSIONS ---
   {
     id: "side_4_rocker",
-    title: "Steam-Bent Style Curved Rocker Runners",
+    title: "Curved White Oak Rocker Runners",
     client: "Captain Doucet",
     tier: 4,
-    isAnchor: false,
-    actNumber: 4,
     desc: "Resaw and cut matching curved White Oak runners on the band saw to 1/32\" accuracy.",
     lumberReq: { allowedIds: ["white_oak_rough", "walnut_rough"], units: 3 },
     precisionDenom: 32,
@@ -226,16 +285,31 @@ ACM.PROJECTS = [
     ],
     workflow: ["tape_measure", "jointer", "planer", "band_saw", "back_saw"],
     requiresPilotHole: true,
-    basePay: 480,
+    basePay: 490,
     starGain: 0.4
+  },
+  {
+    id: "side_4_coffeetable",
+    title: "Black Walnut Live-Edge Coffee Table",
+    client: "Routledge (Sawmill Owner)",
+    tier: 4,
+    desc: "Routledge saved his best slab of Black Walnut for a low-profile living room table with arched stretchers.",
+    lumberReq: { allowedIds: ["walnut_rough", "white_oak_rough"], preferredId: "walnut_rough", units: 4 },
+    precisionDenom: 32,
+    cuts: [
+      { part: "Bookmatched Top", target: 40.21875, display: "40 7/32\"" },
+      { part: "Arched Apron", target: 28.84375, display: "28 27/32\"" }
+    ],
+    workflow: ["tape_measure", "framing_square", "jointer", "planer", "table_saw", "band_saw", "screwdriver"],
+    requiresPilotHole: true,
+    basePay: 560,
+    starGain: 0.45
   },
   {
     id: "anchor_4_lighthouse",
     title: "Lighthouse Keeper's Archival Table",
     client: "Historical Society",
     tier: 4,
-    isAnchor: true,
-    actNumber: 4,
     desc: "Period-accurate White Oak & Walnut council table with band-sawn arched aprons and 1/32\" joinery.",
     lumberReq: { allowedIds: ["white_oak_rough", "walnut_rough"], preferredId: "white_oak_rough", units: 5 },
     precisionDenom: 32,
@@ -245,15 +319,15 @@ ACM.PROJECTS = [
     ],
     workflow: ["tape_measure", "framing_square", "jointer", "planer", "table_saw", "band_saw", "back_saw", "screwdriver"],
     requiresPilotHole: true,
-    basePay: 640,
-    starGain: 0.7,
+    basePay: 660,
+    starGain: 0.6,
     choice: {
       prompt: "A summer estate owner offers $120 to delay the museum table by a day for a quick patio repair:",
       optionA: {
         label: "Honor the Historical Society deadline first (+0.30★ integrity)",
         cashDelta: 0,
         starDelta: 0.3,
-        note: "The museum curator recommends your shop for the Centennial Hall bid!"
+        note: "The museum curator recommends your shop across the entire county!"
       },
       optionB: {
         label: "Take the side cash (+$120, -0.20★ museum delay)",
@@ -264,15 +338,13 @@ ACM.PROJECTS = [
     }
   },
 
-  // --- ACT V ---
+  // --- TIER 5 COMMISSION ---
   {
     id: "anchor_5_centennial",
     title: "Centennial Hall Display Case & Lectern",
     client: "Centennial Restoration Committee",
     tier: 5,
-    isAnchor: true,
-    actNumber: 5,
-    desc: "The town's crown jewel: Curly Maple & Walnut casework with resawn bookmatched panels and 1/64\" Japanese pull-saw joinery.",
+    desc: "Heirloom Curly Maple & Walnut casework with resawn bookmatched panels and 1/64\" Japanese pull-saw dovetails.",
     lumberReq: { allowedIds: ["figured_maple_rough", "walnut_rough"], preferredId: "figured_maple_rough", units: 6 },
     precisionDenom: 64,
     cuts: [
@@ -281,22 +353,7 @@ ACM.PROJECTS = [
     ],
     workflow: ["tape_measure", "framing_square", "jointer", "planer", "table_saw", "band_saw", "japanese_back_saw", "screwdriver"],
     requiresPilotHole: true,
-    basePay: 1100,
-    starGain: 0.85,
-    choice: {
-      prompt: "Arthur attends the unveiling and asks you to sign the underside of the lectern:",
-      optionA: {
-        label: "Dedicate the plaque to Arthur's mentorship (+0.25★ town legend)",
-        cashDelta: 0,
-        starDelta: 0.25,
-        note: "Arthur beams with pride as Alder Creek cheers your shop's grand opening!"
-      },
-      optionB: {
-        label: "Stamp your commercial brand & catalog number (+$100 new orders)",
-        cashDelta: 100,
-        starDelta: 0.1,
-        note: "Regional buyers immediately place orders for custom millwork."
-      }
-    }
+    basePay: 1150,
+    starGain: 0.8
   }
 ];
