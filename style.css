@@ -538,6 +538,96 @@ button:disabled {
   gap: 2px;
 }
 
+/* Recent workshops on this device (quick sign-in) */
+.recent-logins {
+  margin-bottom: 12px;
+}
+
+.recent-logins h3 {
+  font-size: 0.85rem;
+  margin: 0 0 6px;
+}
+
+.recent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recent-item {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.recent-pick {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  background: #fffdf8;
+  color: var(--wood-dark);
+  border: 2px solid #9e8256;
+  padding: 7px 10px;
+  min-width: 0;
+}
+
+.recent-pick:hover,
+.recent-pick:focus-visible {
+  border-color: var(--brass);
+  background: #fff6e2;
+}
+
+.recent-pick .rp-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-pick .rp-meta {
+  font-size: 0.72rem;
+  font-weight: normal;
+  color: #6b5640;
+  white-space: nowrap;
+}
+
+.recent-forget {
+  background: transparent;
+  border: 2px solid transparent;
+  color: #6b5640;
+  padding: 0 8px;
+  font-size: 0.9rem;
+}
+
+.recent-forget:hover {
+  border-color: #9e8256;
+}
+
+.recent-or {
+  font-size: 0.75rem;
+  color: #6b5640;
+  text-align: center;
+  margin: 10px 0 0;
+}
+
+.keep-signed-in {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem !important;
+  font-weight: normal !important;
+  margin-top: 4px;
+  cursor: pointer;
+}
+
+.keep-note {
+  color: #6b5640;
+  white-space: nowrap;
+}
+
 .status-note {
   font-size: 0.8rem;
   color: var(--wood-dark);

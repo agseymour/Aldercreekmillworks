@@ -212,17 +212,6 @@ ACM.Game = (function () {
     return (ACM.PROJECTS || []).find((p) => p.id === state.activeProjectId) || null;
   }
 
-  // If a player drops a half-finished commission, give back the lumber that was already pulled from the rack.
-  function refundAssignedLumber() {
-    const job = getActiveProject();
-    const prog = state.jobProgress;
-    if (job && prog && prog.lumberAssigned) {
-      state.lumberStock[prog.lumberAssigned] = (state.lumberStock[prog.lumberAssigned] || 0) + job.lumberReq.units;
-      return true;
-    }
-    return false;
-  }
-
   function resetJobProgress() {
     state.jobProgress = {
       lumberAssigned: null,
@@ -1031,15 +1020,40 @@ ACM.Game = (function () {
     return true;
   }
 
+  function progressOf(pid) { return pid === state.activeProjectId ? state.jobProgress : state.jobStash[pid]; }
+  // Once a board has been marked, cut or milled (or a mistake made), the work has started and the wood is spent.
+  // Otherwise dropping and re-accepting would wipe the mistake count for free, dodging a refused delivery.
+  function buildStarted(prog) {
+    return !!(prog && prog.lumberAssigned && (prog.cutIndex > 0 || prog.mistakes > 0 || (prog.completedTools || []).length));
+  }
+
   function dropJob(pid) {
     const job = projectById(pid);
-    const prog = pid === state.activeProjectId ? state.jobProgress : state.jobStash[pid];
-    if (job && prog && prog.lumberAssigned) state.lumberStock[prog.lumberAssigned] = (state.lumberStock[prog.lumberAssigned] || 0) + job.lumberReq.units;
+    const prog = progressOf(pid);
+    const started = buildStarted(prog);
+    let refunded = false;
+    if (job && prog && prog.lumberAssigned && !started) {
+      state.lumberStock[prog.lumberAssigned] = (state.lumberStock[prog.lumberAssigned] || 0) + job.lumberReq.units;
+      refunded = true;
+    }
     state.accepted = state.accepted.filter((x) => x !== pid);
     delete state.jobStash[pid];
     if (pid === state.activeProjectId) { state.activeProjectId = null; switchActive(state.accepted[0] || null); }
-    logEvent("drop", { pid });
+    if (started) state.stats.dropped = (state.stats.dropped || 0) + 1;
+    logEvent("drop", { pid, started, mistakes: (prog && prog.mistakes) || 0, cuts: (prog && prog.cutIndex) || 0, refunded });
     updateHUD();
+    if (started) toast("Commission dropped. The cut pieces went in the offcut bin.", "bad");
+    else if (refunded) toast("Commission dropped. The uncut boards went back on your rack.", "good");
+  }
+
+  function askDropJob(pid) {
+    const job = projectById(pid);
+    if (!job) return;
+    if (!buildStarted(progressOf(pid))) { dropJob(pid); updateObjective(); openTownBoard(); return; }
+    const prog = progressOf(pid);
+    openModal("Drop this commission?", `<p>You've already started on the <strong>${escapeHtml(job.title)}</strong>. The boards are marked and cut, so <strong>the wood can't go back on the rack</strong>.</p>
+      <p class="item-meta">Mistakes so far: ${prog.mistakes || 0}. If it's going badly, finishing it still teaches you something. A delivery the client refuses costs the same wood.</p>
+      <div class="dialog-actions"><button class="btn-wood" data-act="job-drop-yes" data-pid="${escapeHtml(pid)}">Drop it, lose the wood</button><button class="btn-brass" data-act="job-drop-no">Keep working on it</button></div>`);
   }
 
   function openTownBoard() {
@@ -1060,7 +1074,7 @@ ACM.Game = (function () {
           ${doneCount > 0 ? `<span class="tag">Built ${doneCount}×</span>` : `<span></span>`}
           ${mineFlag
             ? `<span>${isActive ? `<span class="tag" style="background:#bbf7d0;">Working on this</span>` : `<button class="btn-green btn-sm" data-act="job-switch" data-pid="${p.id}">Work on this</button>`}
-               <button class="btn-wood btn-sm" data-act="job-drop" data-pid="${p.id}">Drop</button></span>`
+               <button class="btn-wood btn-sm" data-act="job-drop" data-pid="${p.id}">${buildStarted(progressOf(p.id)) ? "Drop (wood is lost)" : "Drop"}</button></span>`
             : `<button class="btn-brass btn-sm" data-act="job-accept" data-pid="${p.id}">Accept</button>`}
         </div></div>`;
     };
@@ -1529,12 +1543,20 @@ ACM.Game = (function () {
         <button class="btn-wood btn-sm" id="ps-phone">📱 Phone</button>
         <button class="btn-wood btn-sm" id="ps-help">Controls</button>
         <button class="btn-wood btn-sm" id="ps-save">Save</button>
+        <button class="btn-wood btn-sm" id="ps-signout" title="Save, then return to the sign-in screen">Sign out</button>
       </div>
       <p class="item-meta" style="margin-top:8px">Press Esc again to resume.</p>`);
     document.getElementById("ps-resume").onclick = closeModal;
     document.getElementById("ps-phone").onclick = () => ACM.Guide && ACM.Guide.openPhone();
     document.getElementById("ps-help").onclick = openControls;
     document.getElementById("ps-save").onclick = () => document.getElementById("btn-save").click();
+    document.getElementById("ps-signout").onclick = async () => {
+      const btn = document.getElementById("ps-signout");
+      btn.disabled = true; btn.textContent = "Saving…";
+      await ACM.CloudSync.saveToCloud(state);
+      if (ACM.LoginMemory) ACM.LoginMemory.forgetPin(state.classCode, state.shopName);   // next person on this computer can't walk in
+      location.reload();
+    };
   }
 
   function openControls() {
@@ -2020,24 +2042,36 @@ ACM.Game = (function () {
       return;
     }
 
+    const $in = (id) => document.getElementById(id);
+    const Mem = ACM.LoginMemory;
+    const fail = (msg, focusId) => {
+      statusEl.style.color = "#b91c1c";
+      statusEl.textContent = msg;
+      startBtn.disabled = false;
+      if (focusId) $in(focusId).focus();
+    };
+
     startBtn.onclick = async () => {
       startBtn.disabled = true;
       if (ACM.Audio) ACM.Audio.init();
       let isNew = false;
-      const classCode = document.getElementById("input-class-code").value.trim().toUpperCase() || "PRODTECH11";
-      const shopName = document.getElementById("input-shop-name").value.trim() || "Alder Creek Shop";
-      const pin = document.getElementById("input-pin").value.trim() || "0000";
+      const classCode = $in("input-class-code").value.trim().toUpperCase() || "PRODTECH11";
+      const shopName = $in("input-shop-name").value.trim() || "Alder Creek Shop";
+      const pin = $in("input-pin").value.trim();
+      // "keep me signed in" from an earlier visit: use the remembered PIN hash when no PIN was typed
+      const remembered = Mem ? Mem.find(classCode, shopName) : null;
+      const pinHash = !pin && remembered && remembered.pinHash ? remembered.pinHash : null;
+      if (!pin && !pinHash) { fail("Enter your 4-digit PIN.", "input-pin"); return; }
 
       statusEl.style.color = "#3b2416";
       statusEl.textContent = "Opening workshop...";
 
       try {
         if (ACM.CloudSync && ACM.CloudSync.loadFromCloud) {
-          const result = await ACM.CloudSync.loadFromCloud(classCode, shopName, pin);
+          const result = await ACM.CloudSync.loadFromCloud(classCode, shopName, pin, pinHash);
           if (result && result.error) {
-            statusEl.style.color = "#b91c1c";
-            statusEl.textContent = result.error;
-            startBtn.disabled = false;
+            if (pinHash) { Mem.forgetPin(classCode, shopName); renderRecents(); fail("Please type your PIN to sign in again.", "input-pin"); return; }
+            fail(result.error, "input-pin");
             return;
           }
           const attemptKey = `${classCode}|${shopName}`.toLowerCase();
@@ -2053,6 +2087,8 @@ ACM.Game = (function () {
             migrateLoadedState(result.state);
             toast(`Welcome back to ${state.shopName}!`, "good");
           } else {
+            if (pinHash) { Mem.forgetPin(classCode, shopName); renderRecents(); fail("Please type your PIN to sign in again.", "input-pin"); return; }
+            if (!/^\d{4}$/.test(pin)) { fail("New workshop: choose a PIN of exactly 4 numbers, and remember it.", "input-pin"); return; }
             state.classCode = classCode;
             state.shopName = shopName;
             state.pin = pin;
@@ -2067,6 +2103,14 @@ ACM.Game = (function () {
         state.pin = pin;
       }
 
+      if (Mem) {
+        const keep = $in("input-remember").checked || !!pinHash;
+        Mem.remember(state.classCode, state.shopName, {
+          appearance: state.appearance,
+          pinHash: keep && ACM.CloudSync.pinHashOf ? ACM.CloudSync.pinHashOf(state) : null
+        });
+      }
+      $in("input-pin").value = "";
       document.getElementById("creator-modal").classList.add("hidden");
       updateHUD();
       renderPlantBar();
@@ -2075,6 +2119,50 @@ ACM.Game = (function () {
       if (isNew || !state.tut.seenIntro) { state.tut.seenIntro = true; openHowItWorks(true); }
       else if (ACM.World && ACM.World.focusGameCanvas) ACM.World.focusGameCanvas(document.getElementById("game-canvas"));
     };
+
+    // Enter in any field starts the game
+    ["input-class-code", "input-shop-name", "input-pin"].forEach((id) => {
+      $in(id).addEventListener("keydown", (e) => { if (e.key === "Enter" && !startBtn.disabled) { e.preventDefault(); startBtn.click(); } });
+    });
+
+    // ---- recent workshops on this device: tap one instead of typing the class code and name ----
+    function setAppearance(ap) {
+      if (!ap) return;
+      [["pick-skin", ap.skin], ["pick-hair", ap.hair], ["pick-shirt", ap.shirt], ["pick-apron", ap.apron]].forEach(([id, v]) => {
+        const sel = $in(id);
+        if (v && Array.from(sel.options).some((o) => o.value === v)) { sel.value = v; sel.dispatchEvent(new Event("change")); }
+      });
+    }
+    function renderRecents() {
+      const box = $in("recent-logins");
+      const items = Mem ? Mem.list() : [];
+      if (!items.length) { box.classList.add("hidden"); box.innerHTML = ""; return; }
+      box.classList.remove("hidden");
+      box.innerHTML = `<h3>Welcome back! Pick your workshop:</h3><div class="recent-list">${items.map((e, i) => `
+        <div class="recent-item">
+          <button type="button" class="recent-pick" data-ri="${i}"><span class="rp-name">${escapeHtml(e.name)}</span><span class="rp-meta">${escapeHtml(e.code)}${e.pinHash ? " · signed in" : ""}</span></button>
+          <button type="button" class="recent-forget" data-rf="${i}" title="Remove from this device" aria-label="Remove ${escapeHtml(e.name)} from this device">✕</button>
+        </div>`).join("")}</div><p class="recent-or">Someone else? Fill in the form below.</p>`;
+      box.querySelectorAll("[data-ri]").forEach((b) => (b.onclick = () => {
+        const e = items[Number(b.dataset.ri)];
+        $in("input-class-code").value = e.code;
+        $in("input-shop-name").value = e.name;
+        $in("input-pin").value = "";
+        setAppearance(e.appearance);
+        statusEl.textContent = "";
+        if (e.pinHash) startBtn.click();
+        else { statusEl.style.color = "#3b2416"; statusEl.textContent = `Hi ${e.name}! Type your PIN and press Enter.`; $in("input-pin").focus(); }
+      }));
+      box.querySelectorAll("[data-rf]").forEach((b) => (b.onclick = () => {
+        const e = items[Number(b.dataset.rf)];
+        Mem.remove(e.code, e.name);
+        renderRecents();
+      }));
+    }
+    renderRecents();
+    // most students on a computer share a class code, so start with the last one used here
+    const last = Mem && Mem.list()[0];
+    if (last && !$in("input-class-code").value) $in("input-class-code").value = last.code;
 
     const previewCanvas = document.getElementById("preview-canvas");
     if (previewCanvas && ACM.ArtSprites) {
@@ -2138,7 +2226,9 @@ ACM.Game = (function () {
       else if (act === "shop-mill") openLumberMill();
       else if (act === "job-accept") { if (acceptJob(el.dataset.pid)) toast("Commission accepted!", "good"); openTownBoard(); }
       else if (act === "job-switch") { switchActive(el.dataset.pid); updateHUD(); updateObjective(); toast("Now working on that commission. Go to the Layout Bench.", "good"); openTownBoard(); }
-      else if (act === "job-drop") { dropJob(el.dataset.pid); updateObjective(); openTownBoard(); }
+      else if (act === "job-drop") askDropJob(el.dataset.pid);
+      else if (act === "job-drop-yes") { dropJob(el.dataset.pid); updateObjective(); openTownBoard(); }
+      else if (act === "job-drop-no") openTownBoard();
       else if (["log-sell", "log-mill", "log-mill-paid", "board-sell"].includes(act)) rackAction(el);
       else if (["npc", "chat", "gift", "meal", "job-accept-npc"].includes(act)) npcAction(el);
     });
