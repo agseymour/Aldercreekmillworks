@@ -721,7 +721,7 @@ ACM.World = (function () {
     if (tx > ws.x && tx < ws.x + ws.w - 1 && ty >= ws.y + 2 && ty <= ws.y + ws.h - 2) return true;   // inside the walls (unbuilt bays are blocked anyway)
     const doors = M.buildings.filter((b) => b.doorX != null && b.kind !== "legacy");
     if (M.home && curState && (curState.homeStage || 0) >= 1) doors.push(M.home);
-    return doors.some((b) => Math.abs(tx - b.doorX) <= 1 && ty >= b.y + b.h - 1 && ty <= b.y + b.h);
+    return doors.some((b) => Math.abs(tx - b.doorX) <= 1 && ty >= b.y + b.h - 1 && ty <= b.y + b.h + 1);   // the door and the step in front of it
   }
   function updateChaser() {
     const c = chaser;
@@ -877,7 +877,10 @@ ACM.World = (function () {
     let nearest = null, minScore = 1e9;
     (scene ? scene.stations : M.stations).forEach((s) => {
       const d = Math.hypot(player.x - s.sx, player.y - s.sy);
-      if (d < STATION_RANGE && d < minScore) { minScore = d; nearest = s; }
+      // measuring spots are optional extras: a door, bench or villager in range takes priority over one
+      // (the hardware crate sits right beside Seymour's door and used to steal the E press)
+      const score = s.measure ? d + 48 : d;
+      if (d < STATION_RANGE && score < minScore) { minScore = score; nearest = s; }
     });
     (scene ? (scene.npc ? [scene.npc] : []) : npcs).forEach((n) => {
       if (n.hidden) return;

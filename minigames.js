@@ -316,7 +316,7 @@ ACM.Minigames = (function () {
     html += `</div>`;
 
     if (millingTools.every((tid) => prog.completedTools.includes(tid))) {
-      html += `<div style="margin-top:14px; text-align:center;"><p style="color:#15803d; font-weight:bold;">All parts milled and cut to spec! Walk to the <strong>Assembly & Finishing Table</strong> to fasten and deliver.</p></div>`;
+      html += `<div style="margin-top:14px; text-align:center;"><p style="color:#15803d; font-weight:bold;">All parts milled and cut to spec! Walk to the <strong>Assembly & Finishing Table</strong> to fasten and deliver.</p><button class="btn-brass" data-act="close" data-space>OK</button></div>`;
     }
 
     game.openModal("Milling & Sawing Floor", html);
@@ -524,18 +524,20 @@ ACM.Minigames = (function () {
       return;
     }
 
+    // steps are numbered to match the pills; no button is highlighted, so remembering to square up first is the student's call
+    const nPilot = job.requiresPilotHole ? 2 : 0, nFasten = job.requiresPilotHole ? 3 : 2;
     let html = `
       <p><strong>Final Dry-Fit & Fastening:</strong> ${job.title}</p>
       <p class="item-meta">Check diagonal squareness with your Framing Square, drill pilot holes if joining hardwood/ends, and fasten cleanly.</p>
       <div class="workflow-steps">
         <span class="step-pill ${prog.squared ? "done" : ""}">${prog.squared ? "✓ " : ""}1. Framing Square Check</span>
-        ${job.requiresPilotHole ? `<span class="step-pill ${prog.piloted ? "done" : ""}">${prog.piloted ? "✓ " : ""}2. Drill Pilot Holes</span>` : ""}
-        <span class="step-pill ${prog.fastened ? "done" : ""}">${prog.fastened ? "✓ " : ""}3. Fasten & Finish</span>
+        ${job.requiresPilotHole ? `<span class="step-pill ${prog.piloted ? "done" : ""}">${prog.piloted ? "✓ " : ""}${nPilot}. Drill Pilot Holes</span>` : ""}
+        <span class="step-pill ${prog.fastened ? "done" : ""}">${prog.fastened ? "✓ " : ""}${nFasten}. Fasten & Finish</span>
       </div>
       <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;">
-        <button class="btn-wood" id="btn-do-square" ${prog.squared ? "disabled" : ""}>Check Diagonals (Framing Square)</button>
-        ${job.requiresPilotHole ? `<button class="btn-wood" id="btn-do-pilot" ${prog.piloted ? "disabled" : ""}>Drill Pilot Holes (Cordless Drill)</button>` : ""}
-        <button class="btn-brass" id="btn-do-fasten" ${prog.fastened ? "disabled" : ""}>Fasten & Finish (minigame)</button>
+        <button class="btn-wood" id="btn-do-square" ${prog.squared ? "disabled" : ""}>1. Check Diagonals (Framing Square)</button>
+        ${job.requiresPilotHole ? `<button class="btn-wood" id="btn-do-pilot" ${prog.piloted ? "disabled" : ""}>${nPilot}. Drill Pilot Holes (Cordless Drill)</button>` : ""}
+        <button class="btn-wood" id="btn-do-fasten" ${prog.fastened ? "disabled" : ""}>${nFasten}. Fasten & Finish (minigame)</button>
       </div>
     `;
 
