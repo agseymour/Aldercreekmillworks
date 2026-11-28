@@ -286,7 +286,8 @@ button:disabled {
   border-radius: 10px;
   width: 100%;
   max-width: 800px;
-  max-height: 88vh;
+  max-height: calc(100vh - 28px);
+  max-height: calc(100dvh - 28px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -316,7 +317,7 @@ button:disabled {
 }
 
 #modal-body {
-  padding: 16px;
+  padding: 12px 16px;
   overflow-y: auto;
   line-height: 1.45;
 }
@@ -705,3 +706,48 @@ table.shop-table th {
 .rv-tab.on { background: #e8b84a; color: #2b1d10; }
 .rv-n { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 9px; background: rgba(0,0,0,.25); font-size: .75rem; text-align: center; }
 .rv-pane[hidden] { display: none; }
+
+/* Fit questions, pictures and answers on one screen (round 2x) */
+.diagram-box { margin: 6px 0; padding: 6px; }
+.diagram-box canvas, #modal-body canvas { max-width: 100%; height: auto; }
+.diagram-box canvas { max-height: 30vh; width: auto; }
+.quiz-options { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: 8px; }
+@media (min-width: 620px) { .quiz-options { grid-template-columns: 1fr 1fr; } }
+.quiz-opt-btn { padding: 8px 10px; font-size: 0.9rem; line-height: 1.3; }
+#sf-art { max-height: 32vh; width: auto !important; }
+@media (max-height: 820px) {
+  #modal-body { padding: 10px 14px; line-height: 1.3; }
+  .diagram-box canvas { max-height: 24vh; }
+  #sf-art { max-height: 26vh; }
+  .quiz-opt-btn { padding: 6px 9px; font-size: 0.85rem; }
+  .item-card { padding: 8px 10px; }
+  .dialog-actions { margin-top: 8px; }
+}
+@media (max-height: 640px) {
+  .diagram-box canvas { max-height: 20vh; }
+  #sf-art { max-height: 20vh; }
+}
+
+/* ---- mission card, bulletin, phone, full screen (round 3a) ---- */
+#mission-card { position: absolute; left: 10px; top: 78px; width: 210px; background: rgba(35, 22, 12, 0.86); border: 2px solid var(--brass); border-radius: 6px; padding: 5px 8px; font-size: 11.5px; line-height: 1.3; color: #f6e7bf; cursor: pointer; z-index: 6; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
+#mission-card.hidden { display: none; }
+#mission-card .mc-head { display: flex; justify-content: space-between; font-weight: bold; color: #ffd84a; font-size: 0.7rem; letter-spacing: 0.02em; }
+#mission-card .mc-body { margin-top: 3px; max-height: 6.2em; overflow: hidden; }
+#bulletin { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); width: min(440px, 92%); background: #f3e6c4; color: #3a2616; border: 3px solid #6b4a2c; border-radius: 4px; padding: 8px 12px; z-index: 8; box-shadow: 0 6px 18px rgba(0,0,0,0.5); animation: blIn 0.45s ease-out; text-align: left; }
+#bulletin.out { opacity: 0; transition: opacity 0.4s; }
+#bulletin .bl-head { font-weight: bold; display: flex; justify-content: space-between; border-bottom: 1px dashed #6b4a2c; padding-bottom: 3px; margin-bottom: 4px; }
+#bulletin .bl-head span { font-weight: normal; font-size: 0.8rem; }
+#bulletin .bl-body { font-size: 0.88rem; margin-bottom: 6px; }
+@keyframes blIn { from { transform: translate(-50%, -30px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+#phone-badge { background: #c0392b; color: #fff; border-radius: 9px; font-size: 0.65rem; padding: 0 5px; margin-left: 3px; vertical-align: top; }
+#phone-badge.hidden { display: none; }
+#btn-phone.ring { animation: ring 0.9s ease-in-out infinite; }
+@keyframes ring { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(-12deg); } 40% { transform: rotate(10deg); } 60% { transform: rotate(-6deg); } }
+.ph-list { display: flex; flex-direction: column; gap: 6px; max-height: 46vh; overflow-y: auto; }
+.ph-msg { background: #e8dcc0; border-radius: 12px 12px 12px 3px; padding: 6px 10px; color: #3a2616; max-width: 92%; }
+.ph-msg.new { background: #fff3c4; border: 1px solid #d9b34a; }
+.ph-from { font-weight: bold; font-size: 0.8rem; } .ph-from span { font-weight: normal; opacity: 0.65; margin-left: 6px; }
+.ph-text { font-size: 0.9rem; }
+body.fs { background: #120b07; }
+body.fs #app-shell { max-width: min(100vw, calc((100vh - 300px) * 1.68)); border-radius: 0; border-width: 2px; }
+body.fs #game-canvas { max-width: none; }

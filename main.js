@@ -742,7 +742,7 @@ ACM.Game = (function () {
     const L = ACM.LOGS[info.type];
     if (!L) { toast("That tree isn't worth cutting.", "bad"); return; }
     const now = Date.now();
-    if (now - lastChop < 700) return;          // one swing at a time
+    if (now - lastChop < 300) return;          // one swing at a time (0.3 s)
     const ce = Math.max(1, Math.round(2 * perkFx().fellEnergy));
     if (!needEnergy(ce)) return;
     lastChop = now;
@@ -750,7 +750,7 @@ ACM.Game = (function () {
     if (!state.chops) state.chops = {};
     const need = CHOPS[info.type] || 7;
     const done = (state.chops[kk] || 0) + 1;
-    spendTime(6, ce);
+    spendTime(2, ce);
     if (done < need) {
       state.chops[kk] = done;
       if (ACM.Audio) ACM.Audio.sfx("chop");
@@ -810,11 +810,12 @@ ACM.Game = (function () {
         closeModal();
         const caught = () => collapseAtMidnight({
           noLoss: true, event: "squirrel_day_end", title: "Chased home",
-          html: `<p><strong>The giant squirrel chased you all the way home!</strong></p>
-            <p class="item-meta">It caught up, and you hid in the workshop until dark, bruised and out of breath. The day is over. Felling lots of trees in a single day makes it more likely that you'll disturb something living in them.</p>
+          html: `<p><strong>The giant squirrel caught up with you!</strong></p>
+            <p class="item-meta">You hid in the workshop until dark, bruised and out of breath. The day is over. Felling lots of trees in a single day makes it more likely that you'll disturb something living in them.</p>
             <div class="dialog-actions"><button class="btn-wood" data-act="close">OK</button></div>`
         });
-        if (ACM.World.startChase && tx != null) { toast("RUN! The squirrel is right behind you!", "bad"); ACM.World.startChase(tx, ty, caught); }
+        const safe = () => { logEvent("squirrel_escape", {}); toast("You ducked inside and the squirrel gave up. Phew!", "good"); };
+        if (ACM.World.startChase && tx != null) { toast("RUN for cover (any building)! You have a 5 second head start.", "bad"); ACM.World.startChase(tx, ty, caught, safe); }
         else caught();
       };
     }, 700);
@@ -1044,7 +1045,7 @@ ACM.Game = (function () {
   function openTownBoard() {
     const tierOK = Math.max(1, Math.floor(state.stars + 0.35));
     const mine = state.accepted.map(projectById).filter(Boolean);
-    const open = ACM.PROJECTS.filter((p) => !p.heritage && !p.design && p.tier <= tierOK && !state.accepted.includes(p.id) && !pendingProduct(p.id));
+    const open = ACM.PROJECTS.filter((p) => !p.heritage && !p.design && !(p.boat && state.boat) && p.tier <= tierOK && !state.accepted.includes(p.id) && !pendingProduct(p.id));
     const card = (p, mineFlag) => {
       const isActive = state.activeProjectId === p.id;
       const doneCount = state.completedProjectIds.filter((id) => id === p.id).length;
@@ -1268,21 +1269,39 @@ ACM.Game = (function () {
     if (ACM.Audio) ACM.Audio.sfx("good");
     updateObjective();
   }
+  /** The single most important thing to do next: { key, html, npc }. Feeds the objective bar, the mission card, the morning bulletin and the phone texts. */
+  function mission() {
+    if (!state.tut) return null;
+    const step = TUT.find((s) => !state.tut.done.includes(s.id) && !(s.id === "forage" && state.season === "Winter"));
+    if (step) return { key: "tut:" + step.id, html: step.text, npc: step.npc || null };
+    const j = getActiveProject(), pend = (state.products || [])[0];
+    if (pend) {
+      const pj = projectById(pend.pid);
+      if (pj) { const t = deliveryTarget(pj); return { key: "hand", html: `Hand over your ${escapeHtml(pj.title)}: ${escapeHtml(targetText(pj))}`, npc: t.type === "npc" ? t.id : null, job: pj }; }
+    }
+    const so = !j && ACM.Story && ACM.Story.objective(ACM.Game);
+    if (so) return { key: "story", html: so, npc: null };
+    if (j) {
+      const p = state.jobProgress || {};
+      const missingTool = (j.workflow || []).find((t) => !state.ownedTools.includes(t));
+      let next = !p.lumberAssigned ? "choose your lumber at the <strong>Layout Bench</strong>" : (j.cuts && p.cutIndex < j.cuts.length) ? "measure and cut at the <strong>Layout Bench</strong>" : "finish it at the <strong>Assembly Table</strong>";
+      if (missingTool) { const tn = (ACM.TOOLS.find((x) => x.id === missingTool) || {}).name || missingTool; next = `you will need a <strong>${escapeHtml(tn)}</strong> (Seymour's Hardware)`; }
+      return { key: "job", html: `<strong>Working on:</strong> ${escapeHtml(j.title)} (${escapeHtml(j.client)}). Next: ${next}.`, npc: null, job: j, missingTool };
+    }
+    const tierOK = Math.max(1, Math.floor(state.stars + 0.35));
+    if (!state.boat && tierOK >= 3) return { key: "boat", html: "Take on the <strong>Row Boat</strong> commission at the Town Board. Captain Doucet wants a boat for the river.", npc: "doucet" };
+    return { key: "board", html: "Pick a commission at the <strong>Town Board</strong>, then talk with neighbours to build friendships.", npc: null };
+  }
+  const stripTags = (h) => String(h || "").replace(/<[^>]+>/g, "");
   function updateObjective() {
     const el = document.getElementById("objective-bar");
     if (!el || !state.tut) return;
     if (state.stars >= 1.65 && !state.tut.done.includes("tier2")) state.tut.done.push("tier2");
-    const step = TUT.find((s) => !state.tut.done.includes(s.id) && !(s.id === "forage" && state.season === "Winter"));
-    state.tut.target = step && step.npc ? step.npc : null;
+    const ms = mission();
+    state.tut.target = ms && ms.npc && ms.key.indexOf("tut:") === 0 ? ms.npc : null;
     el.classList.remove("hidden");
-    if (step) el.innerHTML = `<strong>Next:</strong> ${step.text}`;
-    else {
-      const j = getActiveProject();
-      const pend = (state.products || [])[0];
-      const so = !j && ACM.Story && ACM.Story.objective(ACM.Game);
-      if (pend && !j) { const pj = projectById(pend.pid); if (pj) { el.innerHTML = `<strong>Next:</strong> Hand over your ${escapeHtml(pj.title)}: ${escapeHtml(targetText(pj))}`; return; } }
-      el.innerHTML = so ? `<strong>Next:</strong> ${so}` : j ? `<strong>Working on:</strong> ${escapeHtml(j.title)} (${escapeHtml(j.client)})` : `<strong>Next:</strong> Pick a commission at the Town Board, then talk with neighbours to build friendships.`;
-    }
+    el.innerHTML = ms ? (ms.key === "job" ? ms.html : `<strong>Next:</strong> ${ms.html}`) : "";
+    if (ACM.Guide) ACM.Guide.refresh();
   }
 
   /** Where should the player go next? Mirrors the objective bar. Returns { npc | station | bld | tree } or null. */
@@ -1291,7 +1310,11 @@ ACM.Game = (function () {
     const done = state.tut.done || [];
     const step = TUT.find((s) => !done.includes(s.id) && !(s.id === "forage" && state.season === "Winter"));
     const j = getActiveProject(), pend = (state.products || [])[0];
-    const clientNpc = (pj) => { const n = ACM.NPCS.find((x) => pj && pj.client && pj.client.indexOf(x.clientKey) === 0); return n ? { npc: n.id } : null; };
+    const clientNpc = (pj) => {                      // where this finished piece has to go
+      const t = pj && deliveryTarget(pj);
+      if (!t) return null;
+      return t.type === "npc" ? { npc: t.id } : t.type === "gate" ? { bld: "legacy" } : t.type === "dock" ? { station: "dock" } : { station: "town_board" };
+    };
     const jobStation = () => {
       const p = state.jobProgress || {};
       return { station: (!p.lumberAssigned || (j.cuts && p.cutIndex < j.cuts.length)) ? "layout_bench" : "assembly_table" };
@@ -1302,13 +1325,13 @@ ACM.Game = (function () {
       if (step.id === "fell") return { tree: true };
       if (step.id === "rack") return { station: "lumber_rack" };
       if (step.id === "first_delivery") {
-        if (pend && !j) return clientNpc(projectById(pend.pid)) || { station: "town_board" };
+        if (pend) return clientNpc(projectById(pend.pid)) || { station: "town_board" };
         if (j) return jobStation();
         return { station: "town_board" };
       }
       return null;
     }
-    if (pend && !j) return clientNpc(projectById(pend.pid)) || { station: "town_board" };
+    if (pend) return clientNpc(projectById(pend.pid)) || { station: "town_board" };
     if (j) return jobStation();
     const so = ACM.Story && ACM.Story.objective(ACM.Game);
     if (so) return { bld: "legacy" };
@@ -1498,6 +1521,22 @@ ACM.Game = (function () {
       <div class="dialog-actions"><button class="btn-brass btn-sm" data-act="report">My progress report</button><button class="btn-wood btn-sm" data-act="howto">How it works</button></div>`);
   }
 
+  /** Esc: the whole game stops (clock, energy, the squirrel, walking) while this window is open. */
+  function openPause() {
+    openModal("⏸ Paused", `<p class="item-meta">The game is paused. Time, energy and everything else stand still until you resume.</p>
+      <div class="dialog-actions" style="flex-wrap:wrap;gap:6px">
+        <button class="btn-brass" id="ps-resume" data-space>Resume</button>
+        <button class="btn-wood btn-sm" id="ps-phone">📱 Phone</button>
+        <button class="btn-wood btn-sm" id="ps-help">Controls</button>
+        <button class="btn-wood btn-sm" id="ps-save">Save</button>
+      </div>
+      <p class="item-meta" style="margin-top:8px">Press Esc again to resume.</p>`);
+    document.getElementById("ps-resume").onclick = closeModal;
+    document.getElementById("ps-phone").onclick = () => ACM.Guide && ACM.Guide.openPhone();
+    document.getElementById("ps-help").onclick = openControls;
+    document.getElementById("ps-save").onclick = () => document.getElementById("btn-save").click();
+  }
+
   function openControls() {
     const k = (t) => `<span class="keycap">${t}</span>`;
     openModal("Controls", `<table class="ctl-table"><tbody>
@@ -1509,6 +1548,8 @@ ACM.Game = (function () {
       <tr><td>${k("I")} ${k("Tab")}</td><td>Open the backpack: arrows move the cursor, ${k("Enter")} picks up and swaps items</td></tr>
       <tr><td>${k("Esc")}</td><td>Close any window</td></tr>
       <tr><td>${k("↑")}${k("↓")}${k("←")}${k("→")}</td><td>In menus: move between buttons and options, ${k("Enter")} chooses</td></tr>
+      <tr><td>${k("Esc")}</td><td>Pause the game (press again to resume)</td></tr>
+      <tr><td>${k("P")}</td><td>Open your phone (texts from neighbours about what to do next)</td></tr>
       <tr><td>${k("G")}</td><td>Show or hide the goal arrow that points to your next objective</td></tr>
       <tr><td>${k("H")} ${k("M")}</td><td>This help · mute or unmute sound</td></tr>
     </tbody></table>
@@ -1677,16 +1718,17 @@ ACM.Game = (function () {
   // ---- who receives a finished piece? ----
   function deliveryTarget(job) {
     if (job.heritage) return { type: "gate", label: "Nell, at the old family house" };
+    if (job.boat) return { type: "dock", label: "the River Dock" };
     const c = job.client || "";
     const map = [["Gable", "gable"], ["Mateo", "mateo"], ["Clara", "clara"], ["Harbor Bistro", "clara"], ["MacLeod", "macleod"], ["Alverez", "alverez"], ["Seymour", "seymour"], ["Doucet", "doucet"], ["Routledge", "routledge"]];
     const hit = map.find(([k]) => c.indexOf(k) >= 0);
     if (hit) { const n = npcById(hit[1]); return { type: "npc", id: hit[1], label: n ? n.name : hit[1] }; }
     return { type: "board", label: "the Town Hall commission board (" + c + ")" };
   }
-  const targetText = (job) => { const t = deliveryTarget(job); return t.type === "npc" ? `take it to ${t.label} and hand it over.` : t.type === "gate" ? `take it to ${t.label}.` : `hand it in at ${t.label}.`; };
+  const targetText = (job) => { const t = deliveryTarget(job); return t.type === "npc" ? `take it to ${t.label} and hand it over.` : t.type === "gate" ? `take it to ${t.label}.` : t.type === "dock" ? `take it to ${t.label} and launch it.` : `hand it in at ${t.label}.`; };
   const pendingProduct = (pid) => (state.products || []).some((p) => p.pid === pid);
   function productsFor(t) {   // products addressed to an npc id / "board" / "gate"
-    return (state.products || []).filter((p) => { const job = projectById(p.pid); if (!job) return false; const d = deliveryTarget(job); return t === "board" ? d.type === "board" : t === "gate" ? d.type === "gate" : d.type === "npc" && d.id === t; });
+    return (state.products || []).filter((p) => { const job = projectById(p.pid); if (!job) return false; const d = deliveryTarget(job); return t === "board" ? d.type === "board" : t === "gate" ? d.type === "gate" : t === "dock" ? d.type === "dock" : d.type === "npc" && d.id === t; });
   }
   function handOverButtons(t) {
     return productsFor(t).map((p) => `<button class="btn-green btn-sm" data-act="handover" data-prod="${p.id}">Hand over: ${escapeHtml((projectById(p.pid) || {}).title || "project")} (${p.quality.name})</button>`).join("");
@@ -1731,6 +1773,7 @@ ACM.Game = (function () {
     logEvent("deliver", { pid: job.id, pay: netPay, stars: Number(starDelta.toFixed(2)), mistakes: prog.mistakes, quality: Q.name, lumber: prog.lumberAssigned });
     if (ACM.Audio) ACM.Audio.sfx("coin");
     tutDone("first_delivery");
+    if (job.boat) { state.boat = true; logEvent("boat_built", {}); }
     updateHUD();
     updateObjective();
     renderHotbar();
@@ -1753,6 +1796,7 @@ ACM.Game = (function () {
     } else {
       closeModal();
       if (job.heritage && ACM.Story) setTimeout(() => ACM.Story.onDelivered(ACM.Game, job), 50);
+      if (job.boat && ACM.Dock) setTimeout(() => ACM.Dock.launched(ACM.Game), 80);
       toast(`Delivered ${job.title} (${Q.name} quality). Earned $${netPay} & +${starDelta.toFixed(2)}★${Q.name === "Fair" ? ". Fair work sells for less. Careful measuring pays!" : ""}${freshness < 1 ? " Easy or repeat jobs earn less ★." : ""}`, "good");
       ACM.CloudSync.saveToCloud(state);
     }
@@ -1886,6 +1930,7 @@ ACM.Game = (function () {
     else if (id === "layout_bench") ACM.Minigames.openLayoutBench(this);
     else if (id === "assembly_table") ACM.Minigames.openAssemblyTable(this);
     else if (id === "town_board") openTownBoard();
+    else if (id === "dock") ACM.Dock.open(ACM.Game);
     else if (id === "woodlot") openWoodlotModal();
     else if (id === "homestead") openHomesteadModal();
     else if (id === "legacy_house") { if (ACM.Story.stage(ACM.Game) >= 5) enterBuilding("legacy"); else ACM.Story.openHouse(ACM.Game); }
@@ -2098,6 +2143,23 @@ ACM.Game = (function () {
       else if (["npc", "chat", "gift", "meal", "job-accept-npc"].includes(act)) npcAction(el);
     });
 
+    // Space bar in windows and mini-games: press the main button. Buttons marked data-space win; otherwise the only gold button.
+    function modalSpace(e) {
+      if (e.repeat || document.getElementById("fx-canvas")) return;       // the fastening game handles Space itself
+      const a = document.activeElement;
+      if (a && a.tagName === "BUTTON" && document.getElementById("modal-body").contains(a)) return;  // a focused button activates itself
+      const body = document.getElementById("modal-body");
+      const ok = (b) => b && !b.disabled && b.offsetParent !== null;
+      let b = Array.from(body.querySelectorAll("[data-space]")).find(ok);
+      if (!b) {
+        const golds = Array.from(body.querySelectorAll(".btn-brass")).filter((x) => ok(x) && !x.dataset.ans && x.dataset.act !== "close");
+        if (golds.length === 1) b = golds[0];
+      }
+      if (b) { e.preventDefault(); b.click(); } else e.preventDefault();
+    }
+    // after a mouse click, a button shouldn't keep the focus (so Space doesn't repeat the last click)
+    document.getElementById("modal-body").addEventListener("click", (e) => { const b = e.target.closest && e.target.closest("button"); if (b && e.detail > 0) setTimeout(() => b.blur(), 0); });
+
     window.addEventListener("keydown", (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const tag = (e.target && e.target.tagName) || "";
@@ -2115,6 +2177,16 @@ ACM.Game = (function () {
           else if (k.toLowerCase() === "e") { e.preventDefault(); equipOrUse(invCur); }
           else if (k === "Tab" || k.toLowerCase() === "i") { e.preventDefault(); closeModal(); }
           return;
+        }
+        if (k === " ") { modalSpace(e); return; }
+        {
+          const lk2 = k.toLowerCase(), body = document.getElementById("modal-body");
+          const opts = Array.from(body.querySelectorAll(".quiz-opt-btn")).filter((b) => !b.disabled);
+          const ai = "abcd".indexOf(lk2), ni = "1234".indexOf(lk2);
+          const pick = ai >= 0 ? ai : ni;
+          if (opts.length && pick >= 0 && opts[pick]) { e.preventDefault(); opts[pick].click(); return; }
+          const yn = body.querySelectorAll("[data-ans]");
+          if (yn.length && (lk2 === "y" || lk2 === "n")) { e.preventDefault(); const b = body.querySelector(`[data-ans="${lk2 === "y" ? 1 : 0}"]`); if (b) b.click(); return; }
         }
         if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(k)) {
           const btns = Array.from(document.querySelectorAll("#modal-body button:not([disabled])"));
@@ -2169,9 +2241,9 @@ ACM.Game = (function () {
 
     document.getElementById("modal-close").onclick = closeModal;
     window.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !document.getElementById("modal-overlay").classList.contains("hidden")) {
-        closeModal();
-      }
+      if (e.key !== "Escape") return;
+      if (!document.getElementById("modal-overlay").classList.contains("hidden")) closeModal();
+      else if (state.tut && !(document.getElementById("creator-modal") && !document.getElementById("creator-modal").classList.contains("hidden"))) openPause();   // Esc pauses the game
     });
 
     document.getElementById("btn-story").onclick = openTownBoard;
@@ -2267,6 +2339,33 @@ ACM.Game = (function () {
     heldTool,
     requireHeld,
     goalTarget,
+    mission,
+    stripTags,
+    testAuto() {                       // used by the hidden teacher panel: finish whatever the next task is
+      const out = [];
+      const pend = (state.products || [])[0];
+      if (pend) { const pj = projectById(pend.pid); handOver(pend.id); return "Handed over " + (pj ? pj.title : "a piece"); }
+      let j = getActiveProject();
+      if (!j) {
+        const step0 = TUT.find((s) => !(state.tut.done || []).includes(s.id) && s.id !== "first_delivery");
+        if (step0) { tutDone(step0.id); return "Marked tutorial step done: " + step0.id; }
+        const tierOK = Math.max(1, Math.floor(state.stars + 0.35));
+        const open = ACM.PROJECTS.filter((p) => !p.heritage && !p.design && !(p.boat && state.boat) && p.tier <= tierOK && !state.accepted.includes(p.id) && !pendingProduct(p.id));
+        if (open.length && acceptJob(open[0].id)) { j = getActiveProject(); out.push("Accepted " + j.title); }
+      }
+      if (j) {
+        const p = state.jobProgress;
+        p.lumberAssigned = p.lumberAssigned || j.lumberReq.allowedIds[0];
+        p.cutIndex = (j.cuts || []).length; p.completedTools = (j.workflow || []).slice(); p.nailChecked = true; p.mistakes = 0;
+        completeActiveProject();
+        const pr = (state.products || [])[0]; if (pr) handOver(pr.id);
+        out.push("Built and delivered " + j.title);
+        return out.join(", ");
+      }
+      const step = TUT.find((s) => !(state.tut.done || []).includes(s.id));
+      if (step) { tutDone(step.id); return "Marked tutorial step done: " + step.id; }
+      return out.join(", ") || "Nothing to complete right now";
+    },
     _t: { maybeSquirrel, squirrelChance, plantCheck, openHomesteadModal, invItems, reconcileSlots, selectSlot, invClickSlot, openInventoryModal, openControls, openNpcDialog, fellTree, growForest, acceptJob, switchActive, dropJob, sleepNow, openLumberRack, openTownBoard, handleTileAction, npcAction, rackAction }
   };
 })();

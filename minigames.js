@@ -201,6 +201,7 @@ ACM.Minigames = (function () {
       let currentVal = Math.round((cut.target - stepSize * 5) * job.precisionDenom) / job.precisionDenom;
 
       const html = `
+        <p class="item-meta" style="margin:0 0 4px">Drag the tape sideways, or click a mark on it. It snaps to 1/8". Press Space to strike the line.</p>
         <p><strong>Step 1 — Fractional Tape Measure Layout (${prog.cutIndex + 1}/${job.cuts.length})</strong></p>
         <p>Part: <strong>${cut.part}</strong> | Target Measurement: <strong style="color:#b45309; font-size:1.1rem;">${cut.display}</strong> (Precision: 1/${job.precisionDenom}")</p>
         <div class="diagram-box">
@@ -214,7 +215,7 @@ ACM.Minigames = (function () {
           <button class="btn-wood btn-sm" id="tape-plus-big">+ 1/4"</button>
         </div>
         <div style="text-align:center; margin-top:10px;">
-          <button class="btn-brass" id="btn-mark-cut">Strike Layout Line with Framing Square</button>
+          <button class="btn-brass" id="btn-mark-cut" data-space>Strike Layout Line with Framing Square</button>
         </div>
       `;
 
@@ -227,6 +228,26 @@ ACM.Minigames = (function () {
         readout.textContent = ACM.ArtDiagrams.formatFraction(currentVal, job.precisionDenom);
       };
       redraw();
+
+      // slide the tape with the mouse (drag) or click a spot on it; the value snaps to 1/8" (finer only when the job calls for it)
+      const snap = job.precisionDenom > 8 ? 1 / job.precisionDenom : 1 / 8;
+      const snapV = (v) => Math.max(0.5, Math.round(v / snap) * snap);
+      const ppi = (canvas.width - 40) / 3.0;
+      const cx = (e) => (e.clientX - canvas.getBoundingClientRect().left) * (canvas.width / canvas.getBoundingClientRect().width);
+      let drag = null;
+      canvas.style.cursor = "ew-resize"; canvas.style.touchAction = "none";
+      canvas.addEventListener("pointerdown", (e) => { drag = { x: cx(e), v: currentVal, moved: false, start: Math.max(0, currentVal - 1.5) }; try { canvas.setPointerCapture(e.pointerId); } catch (_) {} });
+      canvas.addEventListener("pointermove", (e) => {
+        if (!drag) return;
+        const dx = cx(e) - drag.x;
+        if (Math.abs(dx) > 3) drag.moved = true;
+        if (drag.moved) { currentVal = snapV(drag.v - dx / ppi); redraw(); }       // the tape slides under your hand
+      });
+      canvas.addEventListener("pointerup", (e) => {
+        if (drag && !drag.moved) { currentVal = snapV(drag.start + (cx(e) - 20) / ppi); redraw(); }   // a click jumps to that mark
+        drag = null;
+      });
+      canvas.addEventListener("pointercancel", () => { drag = null; });
 
       document.getElementById("tape-minus").onclick = () => { currentVal = Math.max(0.5, currentVal - stepSize); redraw(); };
       document.getElementById("tape-plus").onclick = () => { currentVal += stepSize; redraw(); };
@@ -286,7 +307,7 @@ ACM.Minigames = (function () {
         <div class="item-card ${done ? "owned" : !owned ? "locked" : ""}">
           <div class="item-title">${tool.name}</div>
           <div class="item-meta">${owned ? `Sharpness: ${game.state.toolDurability[tid] ?? tool.maxDurability}/${tool.maxDurability}` : "Not owned — visit Seymour's Hardware"}</div>
-          <button class="btn-wood btn-sm run-tool-btn" data-tid="${tid}" ${!owned || done ? "disabled" : ""}>
+          <button class="btn-wood btn-sm run-tool-btn" data-tid="${tid}" ${!owned || done ? "disabled" : ""} ${owned && !done && millingTools.find((x) => game.state.ownedTools.includes(x) && !prog.completedTools.includes(x)) === tid ? "data-space" : ""}>
             ${done ? "Completed" : owned ? "Run Operation" : "Locked"}
           </button>
         </div>

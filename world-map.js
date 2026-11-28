@@ -167,7 +167,11 @@ ACM.Map = (function () {
 
   // ---------------------------------------------------------------- stations (where the player interacts)
   const bld = (id) => buildings.find((b) => b.id === id);
+  // the River Dock: a short pier on the west bank, upstream of the plaza
+  let dockY = 14; for (let y = 10; y <= 18; y++) { const cx = riverCx(y); if (tiles[idx(cx - 3, y)] === SAND && !blocked[idx(cx - 3, y)]) { dockY = y; break; } }
+  const dockX = riverCx(dockY) - 3;
   const stationDefs = [
+    { id: 'dock', shortLabel: 'River Dock', prompt: 'River Dock: launch your boat and row down the river', ix: dockX + 0.5, iy: dockY + 0.5, hit: { x: dockX - 1, y: dockY - 1, w: 3, h: 3 } },
     { id: 'blueprint_desk', shortLabel: 'Blueprint Desk', prompt: 'Blueprint & Certification Desk — Study NS Prod Tech questions, visual IDs & Tier Exams', ix: 12.5, iy: 8.5, hit: furniture[0] },
     { id: 'drafting_table', shortLabel: 'Drafting Table', prompt: 'Drafting Table — learn to draw plans to scale, then design your own piece to build', ix: 16, iy: 8.5, hit: furniture[5] },
     { id: 'layout_bench', shortLabel: 'Layout & Milling', prompt: 'Layout & Milling Bench — Fractional tape measure, Jointer, Planer, Table & Band Saws', ix: 13, iy: 12.5, hit: furniture[1] },
@@ -220,8 +224,9 @@ ACM.Map = (function () {
   [[69, 13], [70, 13], [78, 13], [79, 13]].forEach(([x, y], i) => addProp('logpile', x, y, true, { v: i }));
   addProp('cart', 66, 14);
   [[49, 31], [54, 31]].forEach(([x, y]) => addProp('cafetable', x, y));
-  [[17, 20, 'W: Workshop  E: Village  S: Woodlot'], [47, 20, 'N: Hardware & Sawmill  S: Plaza']].forEach(([x, y, t]) => addProp('sign', x, y, true, { text: t }));
+  [[17, 20, 'W: Workshop  E: Village  S: Woods'], [47, 20, 'N: Shops  S: Plaza']].forEach(([x, y, t]) => addProp('sign', x, y, true, { text: t }));
   addProp('sign', 85, 15, true, { text: 'Trailhead' });
+  addProp('dock', dockX, dockY, false, { len: 3 });
   addProp('well', 67, 31);
   addProp('board', 62, 25, false);
   rect(blocked, 62, 25, 64, 26);

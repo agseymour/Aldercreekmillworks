@@ -145,18 +145,18 @@ ACM.ArtBuildings = (function () {
   }
 
   function drawSign(c, text, cx, y) {
-    c.font = 'bold 9px "Trebuchet MS", Verdana, sans-serif';
+    c.font = 'bold 8px "Trebuchet MS", Verdana, sans-serif';
     const tw = Math.ceil(c.measureText(text).width);
-    const bw = tw + 14;
-    R(c, "#2a1a0e", cx - bw / 2 - 1, y - 1, bw + 2, 16);
-    R(c, "#6b4a2c", cx - bw / 2, y, bw, 14);
-    R(c, "#7e5a37", cx - bw / 2, y, bw, 2);
+    const bw = tw + 10;
+    R(c, "#2a1a0e", cx - bw / 2 - 1, y - 1, bw + 2, 13);
+    R(c, "#6b4a2c", cx - bw / 2, y, bw, 11);
+    R(c, "#7e5a37", cx - bw / 2, y, bw, 1);
     c.fillStyle = "#f6e7bf";
     c.textAlign = "center";
     c.textBaseline = "middle";
-    c.fillText(text, cx, y + 7.5);
-    R(c, "#2a1a0e", cx - bw / 2 + 6, y - 5, 1, 5);
-    R(c, "#2a1a0e", cx + bw / 2 - 7, y - 5, 1, 5);
+    c.fillText(text, cx, y + 6);
+    R(c, "#2a1a0e", cx - bw / 2 + 5, y - 4, 1, 4);
+    R(c, "#2a1a0e", cx + bw / 2 - 6, y - 4, 1, 4);
   }
 
   function drawRoof(c, w, roofH, col, season) {

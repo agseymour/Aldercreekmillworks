@@ -129,6 +129,7 @@
     const planAcc = designEv.length ? designEv.reduce((x, e) => x + (e.total ? e.ok / e.total : 0), 0) / designEv.length : null;
     const a = {
       lessonsDone, lessonTries, designs: designEv.length, planAcc,
+      testMode: !!s.testMode || ev.some((e) => e.t === "test"),
       builds: builds.length, pending, repairs, repairTotal: repairIds.length, bays, safetyEv, lastSafety, quizEv: quizzes, perDay,
       name: s.shopName || "?", days: s.dayCount || 0, stars: Number(s.stars) || 0, cash: Math.round(s.cash || 0), tier: s.certifiedTier || 1,
       delivered: dels.length, q, early, late, dels,
@@ -154,6 +155,7 @@
     PERMITS.forEach(() => {});
     const stuck = a.permits.filter((p) => p.att >= 4 && !p.passed);
     if (stuck.length) f.push("Stuck on " + stuck.map((p) => p.name).join(", "));
+    if (a.testMode) f.push("Used the teacher test panel (test account)");
     if (a.examsTaken >= 3 && a.examsPassed === 0) f.push("Failing certification exams");
     return f;
   }

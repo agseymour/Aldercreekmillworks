@@ -48,7 +48,7 @@ ACM.Safety = (function () {
       const status = r.passed ? `<span style="color:#15803d;font-weight:bold;">✔ Permit earned</span> (best ${r.best}%)` : lock > 0 ? `<span style="color:#b91c1c;">Retry in ${lock}s</span>` : r.att ? `Tries: ${r.att} · best ${r.best}%` : "Not taken yet";
       return `<div class="item-card"><div class="item-title">${t.icon} ${esc(t.name)}</div>
         <p class="item-meta">${t.q.length} questions · ${status}${uses ? `<br>Unlocks in-game: ${esc(uses)}` : ""}</p>
-        <div class="dialog-actions"><button class="btn-brass btn-sm" data-sf="${t.id}">${r.passed ? "Retake" : "Take test"}</button></div></div>`;
+        <div class="dialog-actions"><button class="btn-brass btn-sm" data-sf="${t.id}">${r.passed ? "Retake" : r.missed && r.missed.length ? "Retry " + r.missed.length + " missed" : "Take test"}</button></div></div>`;
     }).join("");
     game.openModal("Safety Permit Board", `
       <p class="item-meta">Posted by Dr. Alverez. Every machine in the shop needs a permit: pass the written test, and the rules become habits. Start with <strong>Safety Orientation</strong>, which unlocks the rest. In the real lab your teacher still signs your permit after a demonstration.</p>
@@ -61,15 +61,17 @@ ACM.Safety = (function () {
     const t = byId(id), r = rec(game, id);
     if (id !== "orientation" && !has(game, "orientation")) { game.toast("Take the Safety Orientation first.", "bad"); return; }
     if (r.lockUntil > Date.now()) { showReview(game, t, r.missed, false); return; }
-    const order = t.q.map((_, i) => i).sort(() => Math.random() - 0.5);
+    // after a failed try, only the questions you got wrong come back; the ones you got right stay right
+    const retry = !r.passed && r.missed && r.missed.length > 0;
+    const order = (retry ? r.missed.slice() : t.q.map((_, i) => i)).sort(() => Math.random() - 0.5);
     const missed = [];
     let pos = 0;
     const step = () => {
       if (pos >= order.length) return finish(game, t, missed, order.length);
       const i = order[pos], q = t.q[i];
       game.openModal(`${t.name} Safety Test`, `
-        <p class="item-meta">Question ${pos + 1} of ${order.length}. Answers are checked at the end.</p>
-        <div class="item-card"><canvas id="sf-art" style="width:100%;max-width:640px;image-rendering:pixelated;border:2px solid #2a1d12;border-radius:6px;display:block;margin:0 auto 6px;"></canvas><p id="sf-cap" class="item-meta" style="text-align:center;margin:0 0 8px;"></p><p style="font-weight:bold;font-size:1.05em;">${esc(q[0])}</p>
+        <p class="item-meta">${retry ? "Retry: only the questions you missed. " : ""}Question ${pos + 1} of ${order.length}. Answers are checked at the end.</p>
+        <div class="item-card"><canvas id="sf-art" style="max-width:100%;image-rendering:pixelated;border:2px solid #2a1d12;border-radius:6px;display:block;margin:0 auto 6px;"></canvas><p id="sf-cap" class="item-meta" style="text-align:center;margin:0 0 8px;"></p><p style="font-weight:bold;font-size:1.05em;">${esc(q[0])}</p>
           <div class="dialog-actions"><button class="btn-brass" data-ans="1">Yes</button><button class="btn-wood" data-ans="0">No</button></div></div>`);
       const cv = document.getElementById("sf-art");
       if (cv && ACM.SafetyArt) { const a = ACM.SafetyArt.render(cv, t.id, q[0]); document.getElementById("sf-cap").innerHTML = "<strong>" + esc(a.cap) + "</strong>" + (a.dim ? " · " + esc(a.dim) : ""); }

@@ -708,19 +708,22 @@ ACM.World = (function () {
   /* ----------------------------------------------------------- update */
   // the giant squirrel: bursts from the felled stump and chases the player; when it reaches them the day ends
   let chaser = null;
-  function startChase(tx, ty, onCaught) {
-    chaser = { x: tx * T + 16, y: ty * T + 16, dir: 1, frame: 0, age: 0, onCaught };
+  function startChase(tx, ty, onCaught, onSafe) {
+    chaser = { x: tx * T + 16, y: ty * T + 16, dir: 1, frame: 0, age: 0, wait: 300, onCaught, onSafe };   // 5 s head start (300 steps)
   }
   function updateChaser() {
     const c = chaser;
     if (!c) return;
-    c.age++; c.frame += 0.28;
+    c.age++;
+    if (scene) { chaser = null; if (c.onSafe) c.onSafe(); return; }        // inside a building you're safe
+    if (c.wait > 0) { c.wait--; c.frame += 0.08; return; }                  // it shakes itself and glares for a few seconds first
+    c.frame += 0.24;
     const dx = player.x - c.x, dy = player.y - c.y, d = Math.hypot(dx, dy) || 1;
     if (Math.abs(dx) > 2) c.dir = dx > 0 ? 1 : -1;
-    const spd = Math.max(2.2, Math.min(4.6, player.speed * 1.35 + (c.age > 240 ? 0.6 : 0)));
+    const spd = Math.max(1.6, player.speed * 0.9);                          // a little slower than you, so running straight to cover works
     c.x += (dx / d) * Math.min(spd, d); c.y += (dy / d) * Math.min(spd, d);
-    // inside a building you're caught right away (it follows you in); also caught after a long chase
-    if (d < 20 || scene || c.age > 900) { chaser = null; const cb = c.onCaught; if (cb) cb(); }
+    if (d < 20) { chaser = null; if (c.onCaught) c.onCaught(); }
+    else if (c.age > 3000) { chaser = null; if (c.onSafe) c.onSafe(); }     // after ~50 s it loses interest
   }
 
   // --- goal guide: resolves ACM.Game.goalTarget() to a point in the world (outdoors only) ---

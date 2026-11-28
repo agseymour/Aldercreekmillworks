@@ -574,21 +574,35 @@ ACM.ArtWorld = (function () {
       blob(c, "#efe8d6", x + 16, y + 11, 11, 4, 2);
       R(c, "#c93d2f", x + 8, y + 6, 6, 6);
       R(c, "#2f7d6d", x + 20, y + 6, 6, 6);
-    } else if (k === "sign") {
-      R(c, "rgba(0,0,0,0.2)", x + 8, y + 28, 16, 3);
-      R(c, "#4b3320", x + 14, y + 4, 4, 26);
-      ACM.ArtBuildings.drawSign(c, p.text && p.text.length < 18 ? p.text : (p.text || "").split("  ")[0], x + 16, y - 16);
-      if (p.text && p.text.length >= 18) {
-        c.font = 'bold 8px "Trebuchet MS", sans-serif';
-        const lines = p.text.split("  ");
-        const bw = 128;
-        R(c, "#2a1a0e", x + 16 - bw / 2 - 1, y - 38, bw + 2, 12 + lines.length * 11);
-        R(c, "#6b4a2c", x + 16 - bw / 2, y - 37, bw, 10 + lines.length * 11);
-        c.fillStyle = "#f6e7bf";
-        c.textAlign = "center";
-        c.textBaseline = "top";
-        lines.forEach((ln, i) => c.fillText(ln.trim(), x + 16, y - 34 + i * 11));
+    } else if (k === "dock") {
+      // a short wooden pier reaching east over the water, with a row boat tied up once you have built one
+      const len = (p.len || 3) * 32 - 8;
+      R(c, "rgba(0,0,0,0.18)", x + 8, y + 22, len + 6, 6);
+      R(c, "#7a5632", x + 4, y + 8, len, 14);
+      for (let i = 0; i < len; i += 6) R(c, i % 12 ? "#8a6439" : "#6b4a2a", x + 4 + i, y + 8, 5, 14);
+      R(c, "#4b3320", x + 4, y + 8, len, 1); R(c, "#4b3320", x + 4, y + 21, len, 1);
+      [6, len - 4].forEach((o) => { R(c, "#3a2616", x + o, y + 3, 4, 22); R(c, "#5a3d22", x + o, y + 3, 4, 2); });
+      const G = ACM.Game && ACM.Game.state;
+      if (G && G.boat) {
+        const bx = x + len - 30, by = y + 26;
+        R(c, "rgba(0,0,0,0.2)", bx - 2, by + 11, 46, 4);
+        R(c, "#2e1c0e", bx, by + 2, 44, 10); R(c, "#9b6b3a", bx + 2, by + 3, 40, 7); R(c, "#c4965a", bx + 2, by + 3, 40, 2);
+        R(c, "#2e1c0e", bx - 4, by - 1, 6, 4); R(c, "#2e1c0e", bx + 42, by - 1, 6, 4);
+        R(c, "#6e4a24", bx + 12, by + 4, 3, 5); R(c, "#6e4a24", bx + 28, by + 4, 3, 5);
+        R(c, "#d9d2bf", bx + 8, by - 6, 2, 9); R(c, "#4b3320", bx + 6, by - 7, 10, 2);
       }
+    } else if (k === "sign") {
+      // one compact board: small type, sized to its text (long signs become a few short lines)
+      R(c, "rgba(0,0,0,0.2)", x + 8, y + 28, 16, 3);
+      R(c, "#4b3320", x + 14, y + 8, 4, 22);
+      const lines = String(p.text || "").split("  ").map((l) => l.trim()).filter(Boolean);
+      c.font = 'bold 7px "Trebuchet MS", sans-serif';
+      const bw = Math.ceil(Math.max(...lines.map((l) => c.measureText(l).width))) + 8, bh = lines.length * 8 + 4, top = y + 10 - bh;
+      R(c, "#2a1a0e", x + 16 - bw / 2 - 1, top - 1, bw + 2, bh + 2);
+      R(c, "#6b4a2c", x + 16 - bw / 2, top, bw, bh);
+      R(c, "#7e5a37", x + 16 - bw / 2, top, bw, 1);
+      c.fillStyle = "#f6e7bf"; c.textAlign = "center"; c.textBaseline = "top";
+      lines.forEach((ln, i) => c.fillText(ln, x + 16, top + 3 + i * 8));
     } else if (k === "well") {
       R(c, "rgba(0,0,0,0.2)", x + 2, y + 28, 28, 4);
       R(c, "#8a8478", x + 3, y + 12, 26, 18);

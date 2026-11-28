@@ -59,8 +59,8 @@ ACM.PROJECTS = [
     lumberReq: { allowedIds: ["pine_s4s", "cedar_s4s", "spf_s4s"], preferredId: "cedar_s4s", units: 2 },
     precisionDenom: 8,
     cuts: [
-      { part: "Back Mounting Board", target: 11.5, display: "11 1/2\"" },
-      { part: "Sloped Roof Panel", target: 7.25, display: "7 1/4\"" }
+      { part: "Back Mounting Board", target: 11.375, display: "11 3/8\"" },
+      { part: "Sloped Roof Panel", target: 7.625, display: "7 5/8\"" }
     ],
     workflow: ["tape_measure", "framing_square", "crosscut_saw", "hammer"],
     requiresPilotHole: false,
@@ -76,8 +76,8 @@ ACM.PROJECTS = [
     lumberReq: { allowedIds: ["pine_s4s", "spf_s4s", "cedar_s4s"], units: 2 },
     precisionDenom: 8,
     cuts: [
-      { part: "Bottom Panel", target: 16.5, display: "16 1/2\"" },
-      { part: "End Upright", target: 11.25, display: "11 1/4\"" }
+      { part: "Bottom Panel", target: 16.625, display: "16 5/8\"" },
+      { part: "End Upright", target: 11.875, display: "11 7/8\"" }
     ],
     workflow: ["tape_measure", "framing_square", "crosscut_saw", "hammer"],
     requiresPilotHole: false,
@@ -111,7 +111,7 @@ ACM.PROJECTS = [
     precisionDenom: 8,
     cuts: [
       { part: "Header Beam", target: 24.375, display: "24 3/8\"" },
-      { part: "Side Post", target: 18.75, display: "18 3/4\"" }
+      { part: "Side Post", target: 18.875, display: "18 7/8\"" }
     ],
     workflow: ["tape_measure", "framing_square", "crosscut_saw", "cordless_drill", "screwdriver"],
     requiresPilotHole: true,
@@ -270,6 +270,24 @@ ACM.PROJECTS = [
     }
   },
 
+  {
+    id: "boat_rowboat",
+    boat: true,
+    title: "Cedar Row Boat",
+    client: "Captain Doucet",
+    tier: 3,
+    desc: "Captain Doucet wants a sturdy little row boat, launched from the dock on the river. Cedar planks, a square transom, and tight joints that keep the water out. Where the river leads, nobody in Alder Creek will say.",
+    lumberReq: { allowedIds: ["cedar_s4s", "pine_s4s", "cherry_rough"], preferredId: "cedar_s4s", units: 6 },
+    precisionDenom: 16,
+    cuts: [
+      { part: "Side Plank", target: 71.4375, display: "71 7/16\"" },
+      { part: "Transom Board", target: 34.8125, display: "34 13/16\"" }
+    ],
+    workflow: ["tape_measure", "framing_square", "jointer", "planer", "table_saw", "mitre_saw", "cordless_drill"],
+    requiresPilotHole: true,
+    basePay: 520,
+    starGain: 0.5
+  },
   // --- TIER 4 COMMISSIONS ---
   {
     id: "side_4_rocker",
