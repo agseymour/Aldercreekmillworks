@@ -207,20 +207,12 @@ ACM.ArtWorld = (function () {
   }
 
   /* extra ground detail: light/dark meadow patches, grass tufts, flower clumps, pebbles, moss on cobbles, seasonal litter */
-  function dressGround(c, season, p) {
+  function dressGround(c, season, p, tx0, ty0, tx1, ty1) {
     const hs = M.hash, Wd = M.W, G = TYPE.GRASS;
     const flowerCols = season === "Spring" ? ["#ff8fb3", "#fff3b0", "#ffffff", "#c7a6ff", "#ffd447"] : season === "Summer" ? ["#ffd447", "#ff7a6b", "#ffffff", "#7ec8ff"] : season === "Autumn" ? ["#e8a23a", "#c0562f", "#d9b36a"] : ["#dfeaf3"];
-    for (let ty = 0; ty < H; ty++) for (let tx = 0; tx < Wd; tx++) {
+    for (let ty = ty0; ty < ty1; ty++) for (let tx = tx0; tx < tx1; tx++) {
       const t = M.tiles[ty * Wd + tx], x = tx * T, y = ty * T;
       if (t === G) {
-        // soft round meadow patches so the lawn isn't one flat tone
-        const pv = hs(tx, ty, 71);
-        if (pv < 0.05 || pv > 0.95) {
-          const r = 40 + hs(tx, ty, 72) * 50, cx = x + 16, cy = y + 16, light = pv < 0.5;
-          const g = c.createRadialGradient(cx, cy, 2, cx, cy, r);
-          g.addColorStop(0, light ? "rgba(255,255,190,0.10)" : "rgba(10,70,30,0.11)"); g.addColorStop(1, "rgba(0,0,0,0)");
-          c.fillStyle = g; c.fillRect(cx - r, cy - r, r * 2, r * 2);
-        }
         // grass tufts: three short blades
         for (let k = 0; k < 3; k++) {
           if (hs(tx, ty, 80 + k) > 0.34) continue;
@@ -251,16 +243,173 @@ ACM.ArtWorld = (function () {
     }
   }
 
+  /* ---------------- per-pixel ground ----------------
+     Grass, path, sand, cobble and water are painted pixel by pixel from world-space noise, so patches
+     flow across tile borders and the edges between materials are organic instead of tile-shaped.
+     Bridges, the workshop floor and scorched ground keep their tile drawings on top. */
+  function noiseField(cw, ch, seed) {
+    const f = new Float32Array(cw * ch);
+    for (let i = 0; i < f.length; i++) f[i] = hash(i % cw, (i / cw) | 0, seed);
+    return f;
+  }
+  function sampler(field, cw, ch, cell) {
+    return (px, py) => {
+      const fx = px / cell, fy = py / cell, x0 = Math.floor(fx), y0 = Math.floor(fy);
+      let u = fx - x0, v = fy - y0; u = u * u * (3 - 2 * u); v = v * v * (3 - 2 * v);
+      const xa = Math.min(cw - 1, x0), xb = Math.min(cw - 1, x0 + 1), ya = Math.min(ch - 1, y0), yb = Math.min(ch - 1, y0 + 1);
+      const a = field[ya * cw + xa], b = field[ya * cw + xb], c = field[yb * cw + xa], d = field[yb * cw + xb];
+      return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+    };
+  }
+
+  let fields = null;
+  function paintGroundPixels(c, season, p, tx0, ty0, tx1, ty1) {
+    const PW = W * T, PH = H * T, RW0 = (tx1 - tx0) * T, RH0 = (ty1 - ty0) * T, OX = tx0 * T, OY = ty0 * T;
+    const img = c.createImageData(RW0, RH0), D = img.data;
+    if (!fields) fields = {
+      big: sampler(noiseField(PW / 96 + 2, PH / 96 + 2, 301), PW / 96 + 2, PH / 96 + 2, 96),
+      mid: sampler(noiseField(PW / 24 + 2, PH / 24 + 2, 302), PW / 24 + 2, PH / 24 + 2, 24),
+      sml: sampler(noiseField(PW / 6 + 2, PH / 6 + 2, 303), PW / 6 + 2, PH / 6 + 2, 6)
+    };
+    const { big, mid, sml } = fields;
+    const RG = season === "Winter" ? [hx("#a9bccd"), hx(p.dark), hx(p.grass), hx(p.alt), hx("#f6fafd")] : ramp5(p.dark, p.grass, p.alt), RP = ramp5(p.pathD, p.path, shade(p.path, 0.18));
+    const RS = ramp5(shade(p.sand, -0.22), p.sand, shade(p.sand, 0.16)), RC = ramp5(shade(p.cobble, -0.32), p.cobble, shade(p.cobble, 0.22));
+    const RW = ramp5(p.waterD, p.water, p.waterL), WET = hx(shade(p.sand, -0.28));
+    const winter = season === "Winter";
+    const put = (i, col) => { D[i] = col[0]; D[i + 1] = col[1]; D[i + 2] = col[2]; D[i + 3] = 255; };
+    const q = (l, x, y) => { const b = (BAYER[(y & 3) * 4 + (x & 3)] / 16 - 0.47) * 0.5; return Math.max(0, Math.min(4, Math.floor(l * 4.6 + b))); };
+    const G = TYPE.GRASS, WA = TYPE.WATER, BR = TYPE.BRIDGE;
+    // distance (px) from a pixel to the nearest neighbouring tile that matches pred
+    const distTo = (tx, ty, lx, ly, pred) => {
+      let d = 99;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        if (!pred(tileT(tx + dx, ty + dy))) continue;
+        const ax = dx < 0 ? lx + 0.5 : dx > 0 ? T - lx - 0.5 : 0, ay = dy < 0 ? ly + 0.5 : dy > 0 ? T - ly - 0.5 : 0;
+        const v = dx && dy ? Math.hypot(ax, ay) : dx ? ax : ay;
+        if (v < d) d = v;
+      }
+      return d;
+    };
+    const isGrass = (t) => t === G, notWater = (t) => t !== WA && t !== BR, isWater = (t) => t === WA || t === BR;
+
+    for (let ty = ty0; ty < ty1; ty++) for (let tx = tx0; tx < tx1; tx++) {
+      const t = tileT(tx, ty);
+      if (t === TYPE.FLOOR || t === TYPE.SCORCH || t === BR) continue;    // drawn by drawTile
+      const nearGrass = t !== G && t !== WA && [[0, -1], [0, 1], [-1, 0], [1, 0], [1, 1], [-1, -1], [1, -1], [-1, 1]].some(([dx, dy]) => tileT(tx + dx, ty + dy) === G);
+      const nearWater = t !== WA && [[0, -1], [0, 1], [-1, 0], [1, 0], [1, 1], [-1, -1], [1, -1], [-1, 1]].some(([dx, dy]) => isWater(tileT(tx + dx, ty + dy)));
+      const nearBank = t === WA && [[0, -1], [0, 1], [-1, 0], [1, 0], [1, 1], [-1, -1], [1, -1], [-1, 1]].some(([dx, dy]) => notWater(tileT(tx + dx, ty + dy)));
+      for (let ly = 0; ly < T; ly++) for (let lx = 0; lx < T; lx++) {
+        const px = tx * T + lx, py = ty * T + ly, i = ((py - OY) * RW0 + (px - OX)) * 4;
+        let mat = t;
+        if (nearGrass) {
+          // grass creeps over the edge along a ragged line
+          const dg = distTo(tx, ty, lx, ly, isGrass), reach = 2 + sml(px, py) * 6 + (hash(px >> 1, py >> 1, 304) < 0.2 ? 2 : 0);
+          if (dg < reach) mat = G;
+        }
+        if (mat === G) {
+          const amp = winter ? 0.45 : 1;
+          let l = 0.5 + ((big(px, py) - 0.5) * 0.5 + (mid(px, py) - 0.5) * 0.3 + (sml(px, py) - 0.5) * 0.12) * amp;
+          // short grass blades: a light tip with a dark root under it (sparse, so the lawn stays calm)
+          const bs = hash(px, (py + ((px * 7) & 3)) >> 2, 305);
+          if (bs > 0.94) l += (((py + ((px * 7) & 3)) & 3) === 0 ? 0.2 : 0.07) * amp;
+          else if (bs < 0.035) l -= 0.15 * amp;
+          if (t !== G) l -= 0.08;                       // fringe a touch darker where it overhangs
+          l = Math.max(0.2, Math.min(0.84, l));
+          // organic (noise) rather than ordered dithering, so big patches don't show a checkerboard
+          put(i, RG[Math.max(0, Math.min(4, Math.floor(l * 4.6 + (hash(px >> 1, py, 320) - 0.5) * 0.45)))]);
+          continue;
+        }
+        if (mat === TYPE.PATH) {
+          let l = 0.5 + (mid(px, py) - 0.5) * 0.5 + (hash(px, py, 306) - 0.5) * 0.18;
+          const pb = hash(px >> 1, py >> 1, 307);
+          if (pb > 0.975) l += 0.35; else if (pb > 0.955) l -= 0.3;        // pebbles and pits
+          if (nearGrass && distTo(tx, ty, lx, ly, isGrass) < 9) l -= 0.12;   // packed edge
+          put(i, RP[q(l, px, py)]);
+          continue;
+        }
+        if (mat === TYPE.SAND) {
+          let l = 0.52 + (mid(px, py) - 0.5) * 0.35 + (hash(px, py, 308) - 0.5) * 0.2;
+          l += Math.sin(px * 0.12 + py * 0.55 + mid(px, py) * 7) * 0.08;      // wind ripples
+          const dw = nearWater ? distTo(tx, ty, lx, ly, isWater) : 99;
+          if (dw < 6 + sml(px, py) * 4 && !winter) { const k = Math.max(0, 1 - dw / 10); const col = RS[q(l - 0.2, px, py)]; put(i, [col[0] + (WET[0] - col[0]) * k, col[1] + (WET[1] - col[1]) * k, col[2] + (WET[2] - col[2]) * k]); continue; }
+          put(i, RS[q(l, px, py)]);
+          continue;
+        }
+        if (mat === TYPE.COBBLE) {
+          // jittered-grid stones, lit from the upper left, with mortar lines
+          const cs = 9, gx = Math.floor(px / cs), gy = Math.floor(py / cs);
+          let d1 = 1e9, d2 = 1e9, bx = 0, by = 0, id = 0;
+          for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+            const cx = (gx + ox) * cs + 1.5 + hash(gx + ox, gy + oy, 309) * (cs - 3), cy = (gy + oy) * cs + 1.5 + hash(gx + ox, gy + oy, 310) * (cs - 3);
+            const d = (px - cx) * (px - cx) + (py - cy) * (py - cy);
+            if (d < d1) { d2 = d1; d1 = d; bx = px - cx; by = py - cy; id = hash(gx + ox, gy + oy, 311); } else if (d < d2) d2 = d;
+          }
+          const edge = Math.sqrt(d2) - Math.sqrt(d1);
+          if (edge < 1.3) { put(i, RC[0]); continue; }
+          let l = 0.55 + (id - 0.5) * 0.3 - (bx + by) * 0.045 + (hash(px, py, 312) - 0.5) * 0.08;
+          if (edge < 2.3 && (bx > 0 || by > 0)) l -= 0.18;
+          put(i, RC[q(l, px, py)]);
+          continue;
+        }
+        if (mat === WA) {
+          const db = nearBank ? distTo(tx, ty, lx, ly, notWater) : 99;
+          let l = 0.42 + (mid(px, py) - 0.5) * 0.18;
+          if (db < 2) l = winter ? 0.75 : 0.95;                       // foam line / ice rim
+          else if (db < 7 + sml(px, py) * 4) l += 0.22;               // shallows
+          // ripple lines drifting across the current
+          const rw = (py + Math.round(Math.sin(px * 0.07 + ty) * 2.2)) % 11;
+          if (rw === 0 && hash(px >> 3, py, 313) > 0.35) l += 0.22;
+          else if (rw === 1 && hash(px >> 3, py - 1, 313) > 0.35) l -= 0.1;
+          if (winter && hash(px >> 2, py >> 2, 314) > 0.985) l -= 0.3;   // cracks in the ice
+          put(i, RW[q(l, px, py)]);
+        }
+      }
+    }
+    c.putImageData(img, OX, OY);
+  }
+
+  /* The ground is painted lazily in 8x8-tile chunks: the ones in view first (ensureGround), then a few
+     more each frame in the background (warmGround), so there's no long pause at load or season change. */
+  const CH = 8, CW = Math.ceil(W / CH), CHH = Math.ceil(H / CH);
   function getGround(season) {
-    if (groundCache[season]) return groundCache[season];
-    const p = PAL[season] || PAL.Spring;
-    const cv = mk(W * T, H * T);
-    const c = cv.getContext("2d");
+    let g = groundCache[season];
+    if (!g) g = groundCache[season] = { cv: mk(W * T, H * T), done: new Uint8Array(CW * CHH), left: CW * CHH };
+    return g.cv;
+  }
+  function paintChunk(season, cx, cy) {
+    const g = groundCache[season], k = cy * CW + cx;
+    if (g.done[k]) return;
+    g.done[k] = 1; g.left--;
+    const p = PAL[season] || PAL.Spring, c = g.cv.getContext("2d");
     c.imageSmoothingEnabled = false;
-    for (let ty = 0; ty < H; ty++) for (let tx = 0; tx < W; tx++) drawTile(c, tx, ty, season, p);
-    dressGround(c, season, p);
-    groundCache[season] = cv;
-    return cv;
+    const tx0 = cx * CH, ty0 = cy * CH, tx1 = Math.min(W, tx0 + CH), ty1 = Math.min(H, ty0 + CH);
+    paintGroundPixels(c, season, p, tx0, ty0, tx1, ty1);
+    for (let ty = ty0; ty < ty1; ty++) for (let tx = tx0; tx < tx1; tx++) {
+      const t = M.tiles[ty * W + tx];
+      if (t === TYPE.FLOOR || t === TYPE.SCORCH || t === TYPE.BRIDGE) drawTile(c, tx, ty, season, p);
+    }
+    dressGround(c, season, p, tx0, ty0, tx1, ty1);
+  }
+  function ensureGround(season, x, y, w, h) {
+    getGround(season);
+    const cx0 = Math.max(0, Math.floor(x / (CH * T))), cy0 = Math.max(0, Math.floor(y / (CH * T)));
+    const cx1 = Math.min(CW - 1, Math.floor((x + w) / (CH * T))), cy1 = Math.min(CHH - 1, Math.floor((y + h) / (CH * T)));
+    for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) paintChunk(season, cx, cy);
+    return groundCache[season].cv;
+  }
+  // paint up to n more chunks, nearest to (x, y) first
+  let warmTick = 0;
+  function warmGround(season, x, y, n) {
+    const g = groundCache[season]; if (!g || !g.left) return;
+    if (++warmTick % 3) return;      // a chunk costs ~10ms; spread them out so walking stays smooth
+    const ccx = x / (CH * T), ccy = y / (CH * T);
+    for (let k = 0; k < n && g.left; k++) {
+      let best = -1, bd = 1e9;
+      for (let i = 0; i < g.done.length; i++) if (!g.done[i]) { const d = Math.hypot((i % CW) + 0.5 - ccx, ((i / CW) | 0) + 0.5 - ccy); if (d < bd) { bd = d; best = i; } }
+      if (best < 0) return;
+      paintChunk(season, best % CW, (best / CW) | 0);
+    }
   }
 
 
@@ -1178,6 +1327,8 @@ ACM.ArtWorld = (function () {
     drawClockAndEnergy,
     SPECIES,
     getGround,
+    ensureGround,
+    warmGround,
     getWorkshop,
     getTree,
     drawProp,

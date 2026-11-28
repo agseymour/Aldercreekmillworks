@@ -1071,7 +1071,9 @@ ACM.World = (function () {
     ctx.scale(WZ, WZ);
     ctx.translate(-camera.x, -camera.y);
 
-    ctx.drawImage(AW.getGround(season), camera.x, camera.y, VW, VH, camera.x, camera.y, VW, VH);
+    const ground = AW.ensureGround ? AW.ensureGround(season, camera.x, camera.y, VW, VH) : AW.getGround(season);
+    ctx.drawImage(ground, camera.x, camera.y, VW, VH, camera.x, camera.y, VW, VH);
+    if (AW.warmGround) AW.warmGround(season, camera.x + VW / 2, camera.y + VH / 2, 1);
     { const wk = AW.getWorkshop(season, ACM.Workshop ? ACM.Workshop.zones(curState) : { west: true, east: true }); ctx.drawImage(wk.cv, wk.x, wk.y); }
     AW.drawWaterShimmer(ctx, camera.x, camera.y, tick, VW, VH);
     if (atm) AT.water(ctx, camera, VW, VH, atm, tick);
