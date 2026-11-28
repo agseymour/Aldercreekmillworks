@@ -14,7 +14,7 @@
 -- STEP 1: put your school setup code between the quotes on the next line (something only staff know).
 --         Teachers type it once, the first time they open a new class code on the dashboard.
 --         Use '' (empty) to let anyone claim an unused class code, which was the old behaviour.
-do $$ declare setup_code text := 'CHANGE-ME';
+do $$ declare setup_code text := 'HHS4682';
 begin
   if setup_code = 'CHANGE-ME' then
     raise exception 'Edit the school setup code at the top of this script (STEP 1) before running it.';
