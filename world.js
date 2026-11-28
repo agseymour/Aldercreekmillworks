@@ -934,6 +934,18 @@ ACM.World = (function () {
       case "ptree": { const t = e.t; return { cv: plantedSprite(t, season), x: t.tx * T - 16, y: t.ty * T - 62, base: t.ty * T + 28 }; }
       case "bld": { const sp = AB.getSprite(e.b, season, e.b.kind === "legacy" ? ((state.story && state.story.stage) || 0) : 0); return { cv: sp.cv, x: e.b.x * T - sp.ox, y: e.b.y * T - sp.oy, base: (e.b.y + e.b.h) * T - 2 }; }
       case "home": { const sp = AB.getSprite(M.home, season, state.homeStage || 0); return { cv: sp.cv, x: M.home.x * T - sp.ox, y: M.home.y * T - sp.oy, base: (M.home.y + M.home.h) * T - 2 }; }
+      case "prop": {
+        if (!AW.propSprite || e.p.kind === "dock" || e.p.kind === "flowerbed") return null;
+        const sp = AW.propSprite(e.p, season); if (!sp) return null;
+        return { cv: sp.cv, x: e.p.tx * T - sp.ox, y: e.p.ty * T - sp.oy, base: e.p.ty * T + 28 };
+      }
+      case "scen": case "stump": {
+        if (!AW.scenerySprite) return null;
+        const sc = e.k === "stump" ? { kind: "stump", tx: e.tx, ty: e.ty, v: 0 } : e.s;
+        if (sc.kind === "mushroom") return null;
+        const sp = AW.scenerySprite(sc, season); if (!sp) return null;
+        return { cv: sp.cv, x: sc.tx * T - sp.ox, y: sc.ty * T - sp.oy, base: sc.ty * T + 27 };
+      }
       case "npc": case "player": {
         if (!ACM.ArtSprites.sprite) return null;
         const n = e.n, isP = e.k === "player";

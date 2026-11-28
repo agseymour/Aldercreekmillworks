@@ -106,16 +106,25 @@ ACM.ArtWorld = (function () {
       return;
     }
     if (t === TYPE.BRIDGE) {
-      R(c, p.water, x, y, T, T);
-      R(c, "#a8794a", x, y, T, T);
-      for (let i = 0; i < T; i += 8) {
-        R(c, i % 16 ? "#b98a56" : "#a37244", x + i, y, 8, T);
-        R(c, "#6e4a2a", x + i, y, 1, T);
-      }
+      // deck planks with gaps, grain and nails; heavy rails with posts on the open sides
+      const D = ramp5("#6e4a2a", "#a8794a", "#c9a06a"), Rl = ramp5("#3a2414", "#5a3a22", "#7e5632");
       const top = tileT(tx, ty - 1) !== TYPE.BRIDGE, bot = tileT(tx, ty + 1) !== TYPE.BRIDGE;
-      if (top) { R(c, "#5a3a22", x, y, T, 7); R(c, "#7e5632", x, y, T, 2); R(c, "#3a2414", x + 12, y, 5, 9); }
-      if (bot) { R(c, "#5a3a22", x, y + T - 7, T, 7); R(c, "#7e5632", x, y + T - 7, T, 2); R(c, "#3a2414", x + 12, y + T - 9, 5, 9); R(c, "rgba(0,0,0,0.25)", x, y + T, T, 0); }
-      if (season === "Winter") { R(c, "#f2f7fb", x, y + (top ? 7 : 0), T, 3); }
+      const px1 = (col, xx, yy) => { c.fillStyle = "rgb(" + (col[0] | 0) + "," + (col[1] | 0) + "," + (col[2] | 0) + ")"; c.fillRect(x + xx, y + yy, 1, 1); };
+      for (let yy = 0; yy < T; yy++) for (let xx = 0; xx < T; xx++) {
+        const bx = (x + xx) % 8, k = Math.floor((x + xx) / 8);
+        let tn = bx === 0 ? 0 : bx === 1 ? 3 : bx === 7 ? 1 : 2;
+        if (tn === 2 && hash(x + xx, (y + yy) >> 2, 520 + k) > 0.84) tn = 1;
+        if (tn === 2 && hash(k, ty, 521) > 0.8) tn = 3;                 // a newer, paler plank here and there
+        if ((yy === 9 || yy === 22) && bx === 4) { px1([196, 200, 206], xx, yy); continue; }
+        px1(D[tn], xx, yy);
+      }
+      const rail = (ry) => {
+        for (let yy = 0; yy < 7; yy++) for (let xx = 0; xx < T; xx++) px1(Rl[yy === 0 ? 4 : yy === 1 ? 3 : yy === 6 ? 0 : (hash(x + xx >> 2, yy, 522) > 0.85 ? 1 : 2)], xx, ry + yy);
+        for (let yy = -2; yy < 9; yy++) for (let xx = 12; xx < 17; xx++) if (ry + yy >= 0 && ry + yy < T) px1(Rl[xx === 12 ? 3 : xx === 16 ? 0 : yy < 0 ? 4 : 1], xx, ry + yy);
+      };
+      if (top) rail(0);
+      if (bot) { rail(T - 7); R(c, "rgba(0,0,0,0.25)", x, y + T - 1, T, 1); }
+      if (season === "Winter") { R(c, "#f2f7fb", x, y + (top ? 7 : 0), T, 2); R(c, "#d6e3ee", x, y + (top ? 9 : 2), T, 1); if (top) R(c, "#f2f7fb", x, y, T, 1); }
       return;
     }
     if (t === TYPE.COBBLE) {
@@ -730,251 +739,465 @@ ACM.ArtWorld = (function () {
   }
 
   /* ------------------------------------------------------------------ props & scenery (direct draw) */
-  function drawProp(c, p, season, tick) {
-    const x = p.tx * T, y = p.ty * T;
-    const k = p.kind;
+  /* ------------------------------------------------------------------ props & scenery
+     Each prop is painted once into a cached sprite with a small per-pixel painter (shaded boxes, round
+     posts, log ends, leafy clumps, faceted rocks; 5-tone ramps and a selective outline), then blitted. */
+  const POX = 56, POY = 72, PW0 = 224, PH0 = 136;     // sprite canvas: local tile origin sits at (POX, POY)
+  const rampCache5 = {};
+  const RMP = (hex) => rampCache5[hex] || (rampCache5[hex] = ramp5(shade(hex, -0.32), hex, shade(hex, 0.24)));
+
+  function PBuf() {
+    const w = PW0, h = PH0, tone = new Int8Array(w * h).fill(-1), pal = new Uint8Array(w * h), cols = [], pmap = {};
+    const inb = (x, y) => x >= -POX && y >= -POY && x < w - POX && y < h - POY;
+    const id = (x, y) => (y + POY) * w + (x + POX);
+    const B = {
+      P(hex) { if (pmap[hex] == null) { cols.push(RMP(hex)); pmap[hex] = cols.length - 1; } return pmap[hex]; },
+      set(x, y, t, p) { x = Math.round(x); y = Math.round(y); if (!inb(x, y)) return; const i = id(x, y); tone[i] = Math.max(0, Math.min(4, t)); pal[i] = p; },
+      get(x, y) { return inb(x, y) ? tone[id(x, y)] : -1; },
+      q(l, x, y) { const b = (BAYER[((y + 96) & 3) * 4 + ((x + 64) & 3)] / 16 - 0.47) * 0.5; return Math.max(0, Math.min(4, Math.floor(l * 4.6 + b))); },
+      rect(x, y, w2, h2, p, t) { for (let yy = y; yy < y + h2; yy++) for (let xx = x; xx < x + w2; xx++) B.set(xx, yy, t, p); },
+      /* a lit box: top face lighter, left edge lit, right/bottom shaded; grain "h" or "v" */
+      box(x, y, w2, h2, hex, o) {
+        o = o || {}; const p = B.P(hex), top = o.top || 0;
+        for (let yy = 0; yy < h2; yy++) for (let xx = 0; xx < w2; xx++) {
+          let t = yy < top ? (yy === 0 ? 4 : 3) + (o.topLit ? 0 : 0) : 2;
+          if (yy >= top) {
+            if (xx === 0) t = 3; else if (xx === w2 - 1) t = 1; else if (yy === h2 - 1) t = 1; else if (yy === top && top) t = 1;
+            if (o.grain === "h" && t === 2 && hash(x + xx >> 2, y + yy, 501) > 0.86) t = 1;
+            if (o.grain === "v" && t === 2 && hash(x + xx, y + yy >> 2, 502) > 0.86) t = 1;
+            if (o.planks && t === 2 && (o.planks === "h" ? (yy - top) % o.pw === 0 : xx % o.pw === 0)) t = 1;
+          }
+          B.set(x + xx, y + yy, t, p);
+        }
+      },
+      /* a vertical cylinder (post, barrel, pot): lit from the left */
+      cylV(x, y, w2, h2, hex, o) {
+        o = o || {}; const p = B.P(hex);
+        for (let yy = 0; yy < h2; yy++) for (let xx = 0; xx < w2; xx++) {
+          const u = (xx + 0.5) / w2 * 2 - 1;
+          let l = 0.62 - u * 0.42 - Math.abs(u) * Math.abs(u) * 0.25;
+          if (o.grain && hash(x + xx, y + yy >> 2, 503) > 0.85) l -= 0.15;
+          B.set(x + xx, y + yy, B.q(l, x + xx, y + yy), p);
+        }
+      },
+      /* a horizontal cylinder (rail, log side): lit from above */
+      cylH(x, y, w2, h2, hex, o) {
+        o = o || {}; const p = B.P(hex);
+        for (let yy = 0; yy < h2; yy++) for (let xx = 0; xx < w2; xx++) {
+          const u = (yy + 0.5) / h2 * 2 - 1;
+          let l = 0.6 - u * 0.4;
+          if (o.grain && hash(x + xx >> 2, y + yy, 504) > 0.84) l -= 0.15;
+          B.set(x + xx, y + yy, B.q(l, x + xx, y + yy), p);
+        }
+      },
+      /* a lit ellipsoid with optional leaf texture (bushes) or speckle (rocks) */
+      ball(cx, cy, rx, ry, hex, o) {
+        o = o || {}; const p = B.P(hex);
+        for (let y = Math.floor(cy - ry - 1); y <= cy + ry + 1; y++) for (let x = Math.floor(cx - rx - 1); x <= cx + rx + 1; x++) {
+          const ang = Math.atan2(y - cy, x - cx), wob = o.wob ? 1 + o.wob * Math.sin(ang * 6 + (o.seed || 0)) : 1;
+          const dx = (x + 0.5 - cx) / (rx * wob), dy = (y + 0.5 - cy) / (ry * wob), d2 = dx * dx + dy * dy;
+          if (d2 > 1) continue;
+          const nz = Math.sqrt(1 - d2);
+          let l = (dx * LX + dy * LY + nz * LZ) * 0.72 + 0.28;
+          if (o.leaf) { const lh = hash((x + (y >> 1 & 1)) >> 1, y >> 1, 505 + (o.seed || 0)); if (lh > 0.84) l += 0.2; else if (lh < 0.12) l -= 0.2; }
+          if (o.facet) l += (hash(Math.floor((x - cx) / 4), Math.floor((y - cy) / 3), 506 + (o.seed || 0)) - 0.5) * 0.3;
+          B.set(x, y, B.q(l, x, y), p);
+        }
+      },
+      /* end grain: rings inside a bark rim */
+      disc(cx, cy, r, hexEnd, hexBark) {
+        const pe = B.P(hexEnd), pb = B.P(hexBark);
+        for (let y = Math.floor(cy - r); y <= cy + r; y++) for (let x = Math.floor(cx - r); x <= cx + r; x++) {
+          const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
+          if (d > r) continue;
+          if (d > r - 1.2) { B.set(x, y, x < cx && y < cy ? 2 : 1, pb); continue; }
+          const ring = Math.floor(d * 1.25) % 2;
+          B.set(x, y, (ring ? 2 : 3) + (x < cx && y < cy ? 1 : 0), pe);
+        }
+      },
+      line(x0, y0, x1, y1, hex, t, th) {
+        const p = B.P(hex), n = Math.max(1, Math.round(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0))));
+        for (let i = 0; i <= n; i++) { const k = i / n; for (let j = 0; j < (th || 1); j++) B.set(x0 + (x1 - x0) * k + j, y0 + (y1 - y0) * k, t, p); }
+      },
+      /* snow resting on whatever is the top surface of each column */
+      snowCap(x0, x1, depth) {
+        const p = B.P("#e6eef6");
+        for (let x = x0; x < x1; x++) {
+          let y = -POY; while (y < PH0 - POY && B.get(x, y) < 0) y++;
+          if (y >= PH0 - POY) continue;
+          const d = (depth || 2) + (hash(x, 0, 518) > 0.6 ? 1 : 0);
+          for (let k = 0; k < d; k++) B.set(x, y - 1 + k, k === 0 ? 4 : 3, p);
+        }
+      },
+      snow(x, y, w2) { const p = B.P("#e6eef6"); for (let xx = x; xx < x + w2; xx++) { B.set(xx, y, 4, p); B.set(xx, y + 1, 3, p); if (hash(xx, y, 507) > 0.7) B.set(xx, y + 2, 2, p); } },
+      outline() {
+        const t2 = tone.slice();
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+          const i = y * w + x; if (t2[i] < 0) continue;
+          const e = (xx, yy) => xx < 0 || yy < 0 || xx >= w || yy >= h || t2[yy * w + xx] < 0;
+          if (e(x, y + 1) || e(x + 1, y)) tone[i] = 0;
+          else if (e(x - 1, y) || e(x, y - 1)) tone[i] = Math.min(4, t2[i] + 1);
+        }
+      },
+      canvas(shadow) {
+        const cv = mk(w, h), x = cv.getContext("2d");
+        if (shadow) { x.fillStyle = "rgba(0,0,0,0.22)"; x.fillRect(shadow[0] + POX, shadow[1] + POY, shadow[2], shadow[3] || 4); }
+        const img = x.getImageData(0, 0, w, h), d = img.data;
+        for (let i = 0; i < w * h; i++) {
+          if (tone[i] < 0) continue;
+          const cc = cols[pal[i]][tone[i]];
+          d[i * 4] = cc[0]; d[i * 4 + 1] = cc[1]; d[i * 4 + 2] = cc[2]; d[i * 4 + 3] = 255;
+        }
+        x.putImageData(img, 0, 0);
+        return cv;
+      }
+    };
+    return B;
+  }
+
+  const WOOD = "#9a7046", WOODD = "#6e4a2a", IRON = "#3a3a42", BARK = "#5a3b22", ENDG = "#d6b07a", STONE = "#8a8478";
+
+  function paintProp(B, p, season, fx) {
+    const k = p.kind, win = season === "Winter";
+    let sh = [2, 27, 28, 4];
     if (k === "fence") {
       const right = M.fenceKeys.has(p.tx + 1 + "," + p.ty), down = M.fenceKeys.has(p.tx + "," + (p.ty + 1));
-      const wood = "#a07a4a", woodD = "#6e502e";
-      if (right) { R(c, woodD, x + 14, y + 12, T, 3); R(c, wood, x + 14, y + 11, T, 3); R(c, woodD, x + 14, y + 21, T, 3); R(c, wood, x + 14, y + 20, T, 3); }
-      if (down) { R(c, wood, x + 14, y + 14, 4, T); R(c, woodD, x + 17, y + 14, 1, T); }
-      R(c, "rgba(0,0,0,0.2)", x + 11, y + 28, 10, 3);
-      R(c, woodD, x + 12, y + 6, 8, 24);
-      R(c, wood, x + 12, y + 6, 6, 24);
-      R(c, "#c49a62", x + 12, y + 6, 8, 3);
-      if (season === "Winter") R(c, "#f2f7fb", x + 11, y + 4, 10, 3);
+      if (down) { B.cylV(14, 14, 4, T, WOOD, { grain: 1 }); }
+      if (right) { B.cylH(18, 10, T, 4, WOOD, { grain: 1 }); B.cylH(18, 19, T, 4, WOOD, { grain: 1 }); if (win) { B.snow(18, 9, T); B.snow(18, 18, T); } }
+      B.cylV(12, 6, 8, 24, WOOD, { grain: 1 });
+      B.rect(12, 5, 8, 2, B.P(WOOD), 4); B.set(13, 5, 4, B.P(WOOD));
+      if (win) B.snow(11, 3, 10);
+      sh = [11, 28, 10, 3];
     } else if (k === "lamp") {
-      R(c, "rgba(0,0,0,0.2)", x + 10, y + 28, 12, 3);
-      R(c, "#2b2b30", x + 14, y - 18, 4, 46);
-      R(c, "#2b2b30", x + 10, y - 22, 12, 6);
-      R(c, "#f5d56a", x + 12, y - 16, 8, 10);
-      R(c, "#fff3b8", x + 14, y - 14, 4, 5);
-      R(c, "#2b2b30", x + 10, y - 24, 12, 3);
-      R(c, "#2b2b30", x + 10, y + 26, 12, 4);
-    } else if (k === "planter") {
-      const fx = p.fix && ACM.Repairs.fixed(p.fix);
-      R(c, "rgba(0,0,0,0.2)", x + 1, y + 27, 30, 4);
-      R(c, fx ? "#8a5a30" : "#6a5a48", x + 2, y + 14, 28, 14); R(c, fx ? "#a8743f" : "#4a3f34", x + 2, y + 14, 28, 3);
-      if (fx) { R(c, "#3a2a18", x + 4, y + 12, 24, 4); for (let i = 0; i < 5; i++) { R(c, "#3f8c47", x + 5 + i * 5, y + 6, 2, 8); R(c, ["#e8566a", "#f2c230", "#fff", "#c27ae0", "#e8566a"][i], x + 3 + i * 5, y + 2, 5, 5); } }
-      else { R(c, "#1b120a", x + 12, y + 14, 2, 14); R(c, "#1b120a", x + 20, y + 20, 8, 2); R(c, "#6a5a48", x + 4, y + 11, 6, 3); R(c, "#4a3f34", x + 20, y + 11, 8, 3); R(c, "#6b5a3a", x + 8, y + 9, 3, 3); }
-    } else if (k === "kiosk") {
-      const fx = p.fix && ACM.Repairs.fixed(p.fix), t = fx ? 0 : 3;
-      R(c, "rgba(0,0,0,0.2)", x + 2, y + 28, 28, 4);
-      R(c, "#5a3a1c", x + 5 + t, y - 6, 4, 34); R(c, "#5a3a1c", x + 23 + t, y - 6, 4, 34);
-      R(c, "#7b5431", x + 2 + t, y - 14, 28, 6); R(c, "#3d5a40", x, y - 18 + t, 32, 6);
-      R(c, "#e8d9ae", x + 9 + t, y - 6, 14, 16); R(c, fx ? "#4e7a4a" : "#6b7a5a", x + 11 + t, y - 4, 10, 6); R(c, "#5a8ab0", x + 11 + t, y + 3, 10, 3);
-      if (fx) R(c, "rgba(200,235,250,0.45)", x + 8, y - 7, 16, 18); else { R(c, "#1b120a", x + 9 + t, y - 6, 1, 8); R(c, "#e8d9ae", x + 20 + t, y + 12, 8, 6); R(c, "#5a3a1c", x + 22, y + 26, 10, 3); }
-    } else if (k === "birdhouse") {
-      const fx = p.fix && ACM.Repairs.fixed(p.fix);
-      R(c, "#5a3a1c", x + 14, y - 4, 4, 32); R(c, "rgba(0,0,0,0.2)", x + 8, y + 28, 16, 3);
-      if (fx) { R(c, "#c9744a", x + 7, y - 14, 18, 14); R(c, "#8a3b2e", x + 4, y - 20, 24, 8); R(c, "#6e2a20", x + 4, y - 14, 24, 2); R(c, "#2a1d12", x + 13, y - 10, 6, 6); R(c, "#e2b04a", x + 14, y - 3, 4, 2); R(c, "#f2c230", x + 22, y - 24, 4, 4); R(c, "#2a1d12", x + 25, y - 23, 1, 1); }
-      else { R(c, "#8a6a45", x + 9, y - 8, 14, 10); R(c, "#6a4a2a", x + 6, y - 12, 12, 5); R(c, "#1b120a", x + 12, y - 4, 6, 5); R(c, "#1b120a", x + 18, y - 8, 2, 8); R(c, "#6a4a2a", x + 20, y + 20, 8, 4); }
-    } else if (k === "rocker") {
-      const fx = p.fix && ACM.Repairs.fixed(p.fix);
-      R(c, "rgba(0,0,0,0.2)", x + 2, y + 27, 28, 4);
-      R(c, fx ? "#a8743f" : "#8a6a45", x + 8, y - 8, 4, 24); R(c, fx ? "#a8743f" : "#8a6a45", x + 12, y - 2, 14, 4);
-      R(c, fx ? "#c49656" : "#9a7a50", x + 6, y - 10, 8, 3); R(c, fx ? "#a8743f" : "#8a6a45", x + 20, y + 2, 4, 14);
-      R(c, "#6e502e", x + 4, y + 18, fx ? 26 : 10, 3); R(c, "#6e502e", x + 6, y + 21, 22, 2);
-      if (!fx) { R(c, "#1b120a", x + 14, y - 2, 2, 5); R(c, "#6e502e", x + 22, y + 22, 8, 3); R(c, "#6a4a2a", x + 18, y + 20, 5, 3); } else { R(c, "#d9a43a", x + 12, y + 4, 10, 4); R(c, "#e6bf86", x + 8, y - 8, 1, 22); }
-    } else if (k === "totes") {
-      const fx = p.fix && ACM.Repairs.fixed(p.fix);
-      R(c, "rgba(0,0,0,0.2)", x + 2, y + 27, 28, 4); R(c, "#6e502e", x + 4, y - 8, 4, 36); R(c, "#6e502e", x + 24, y - 8, 4, 36); R(c, "#7b5431", x + 2, y - 10, 28, 4);
-      [[8, "#c0392b"], [16, "#2f7d6d"], [22, "#d9a43a"]].forEach(([dx, cc], i) => { const hang = fx || i !== 1; R(c, cc, x + dx, y - 4 + (hang ? 0 : 6), 7, 12); R(c, "#f2ead3", x + dx + 1, y + (hang ? 0 : 6), 5, 2); if (!fx && i === 1) { R(c, "#1b120a", x + dx + 2, y + 8, 1, 6); R(c, "#1b120a", x + dx + 3, y + 12, 3, 1); } });
-      if (!fx) R(c, "#c0392b", x + 2, y + 22, 8, 5);
-    } else if (k === "bench") {
-      const fx = !p.fix || ACM.Repairs.fixed(p.fix);
-      R(c, "rgba(0,0,0,0.2)", x + 2, y + 26, 28, 4);
-      R(c, "#4b3320", x + 4, y + 18, 4, 10); R(c, "#4b3320", x + 24, y + 18, 4, 10);
-      R(c, fx ? "#b08650" : "#8f6a3f", x, y + 12, T, 7); R(c, fx ? "#c9a068" : "#a9824a", x, y + 12, T, 2);
-      R(c, fx ? "#8f6a3f" : "#6e502e", x, y + 4, T, 6); R(c, fx ? "#a9824a" : "#8f6a3f", x, y + 4, T, 2);
-      if (!fx) { R(c, "#1b120a", x + 10, y + 12, 8, 7); R(c, "#1b120a", x + 20, y + 4, 2, 6); R(c, "#4b3320", x + 22, y + 24, 8, 4); R(c, "#6e502e", x + 14, y + 26, 6, 2); }
-      else { R(c, "#e2b04a", x + 2, y + 14, 2, 2); R(c, "#e2b04a", x + T - 4, y + 14, 2, 2); }
-      if (season === "Winter") R(c, "#f2f7fb", x, y + 2, T, 3);
-    } else if (k === "crate") {
-      R(c, "rgba(0,0,0,0.2)", x + 2, y + 27, 28, 4);
-      R(c, "#a77a44", x + 3, y + 8, 26, 21);
-      R(c, "#c49656", x + 3, y + 8, 26, 3);
-      R(c, "#6e4a26", x + 3, y + 8, 3, 21);
-      R(c, "#6e4a26", x + 26, y + 8, 3, 21);
-      R(c, "#6e4a26", x + 3, y + 17, 26, 3);
-      R(c, "#6e4a26", x + 3, y + 26, 26, 3);
-    } else if (k === "barrel") {
-      R(c, "rgba(0,0,0,0.2)", x + 4, y + 27, 24, 4);
-      blob(c, "#7a5230", x + 16, y + 20, 11, 10, 2);
-      R(c, "#8f6a3f", x + 6, y + 8, 20, 20);
-      R(c, "#a9824a", x + 8, y + 8, 6, 20);
-      R(c, "#3a3a40", x + 6, y + 11, 20, 2);
-      R(c, "#3a3a40", x + 6, y + 23, 20, 2);
-      R(c, "#5a3a22", x + 8, y + 6, 16, 3);
-    } else if (k === "logpile") {
-      R(c, "rgba(0,0,0,0.2)", x, y + 26, T, 5);
-      for (let r = 0; r < 3; r++) for (let i = 0; i < 3 - (r === 2 ? 1 : 0); i++) {
-        const lx = x + 2 + i * 10 + (r === 2 ? 5 : 0), ly = y + 16 - r * 8 + (p.v || 0) % 2;
-        blob(c, "#7a5230", lx + 5, ly + 5, 5, 5, 1);
-        blob(c, "#d9b680", lx + 5, ly + 5, 3, 3, 1);
+      B.box(10, 25, 12, 5, IRON, { top: 2 });
+      B.cylV(14, -14, 4, 40, IRON);
+      B.rect(11, -18, 10, 1, B.P(IRON), 1);
+      // lantern: cap, glowing panes in a cage, finial
+      B.box(9, -25, 14, 4, IRON, { top: 2 }); B.rect(13, -28, 6, 3, B.P(IRON), 2); B.set(15, -30, 3, B.P(IRON)); B.set(16, -30, 2, B.P(IRON));
+      const g = B.P("#f2c35a");
+      for (let y = -21; y < -9; y++) for (let x = 11; x < 21; x++) {
+        if (x === 11 || x === 20 || x === 15 || y === -21 || y === -10) { B.set(x, y, x === 11 ? 2 : 1, B.P(IRON)); continue; }
+        B.set(x, y, y < -17 ? 4 : y < -13 ? 3 : 2, g);
       }
-      if (season === "Winter") R(c, "#f2f7fb", x + 2, y + 5, 26, 3);
+      B.box(10, -10, 12, 2, IRON);
+      if (win) B.snow(9, -27, 14);
+      sh = [10, 28, 12, 3];
+    } else if (k === "bench") {
+      const leg = IRON, seat = fx ? "#b08650" : "#8f6a3f";
+      B.box(4, 18, 3, 10, leg); B.box(25, 18, 3, 10, leg);
+      B.box(0, 4, T, 3, seat, { grain: "h" }); B.box(0, 7, T, 3, seat, { grain: "h" });      // back slats
+      B.box(0, 12, T, 7, seat, { top: 3, planks: "h", pw: 3, grain: "h" });                   // seat
+      if (!fx) { B.rect(10, 12, 8, 7, B.P("#1b120a"), 1); B.line(20, 4, 21, 9, "#1b120a", 1); B.box(22, 24, 8, 3, WOODD); }
+      else { B.set(2, 15, 4, B.P("#e2b04a")); B.set(T - 3, 15, 4, B.P("#e2b04a")); }
+      if (win) B.snow(0, 2, T);
+      sh = [2, 26, 28, 4];
+    } else if (k === "crate") {
+      B.box(3, 8, 26, 21, "#a77a44", { top: 4, planks: "h", pw: 6, grain: "h" });
+      const d = B.P("#6e4a26");
+      for (let i = 0; i < 17; i++) { B.set(4 + Math.round(i * 22 / 16), 12 + i, 1, d); B.set(5 + Math.round(i * 22 / 16), 12 + i, 2, d); }  // diagonal brace
+      [[5, 13], [26, 13], [5, 26], [26, 26]].forEach(([xx, yy]) => B.set(xx, yy, 4, B.P("#c8ccd2")));
+      if (win) B.snow(3, 7, 26);
+    } else if (k === "barrel") {
+      const st = B.P("#8f6a3f");
+      for (let y = 9; y < 29; y++) {
+        const bulge = Math.round(2 * Math.sin(((y - 9) / 20) * Math.PI));
+        for (let x = 6 - bulge; x < 26 + bulge; x++) {
+          const u = (x - 16) / (10 + bulge);
+          let l = 0.62 - u * 0.42 - u * u * 0.22;
+          if ((x - 6 + 64) % 5 === 0) l -= 0.18;                                   // staves
+          B.set(x, y, B.q(l, x, y), st);
+        }
+      }
+      [12, 24].forEach((hy) => { for (let x = 4; x < 28; x++) if (B.get(x, hy) >= 0) { const u = (x - 16) / 12; B.set(x, hy, B.q(0.55 - u * 0.4, x, hy), B.P("#4a4a52")); B.set(x, hy + 1, 1, B.P("#4a4a52")); } });
+      // lid
+      const lid = B.P("#7a5230");
+      for (let x = 7; x < 25; x++) for (let y = 6; y < 10; y++) { const dx = (x - 16) / 9, dy = (y - 8) / 2.2; if (dx * dx + dy * dy <= 1) B.set(x, y, y < 8 ? 3 : 2, lid); }
+      if (win) B.snow(8, 5, 16);
+      sh = [4, 27, 24, 4];
+    } else if (k === "logpile") {
+      for (let r = 0; r < 3; r++) for (let i = 0; i < 3 - (r === 2 ? 1 : 0); i++) {
+        const lx = 2 + i * 10 + (r === 2 ? 5 : 0), ly = 16 - r * 8 + (p.v || 0) % 2;
+        B.disc(lx + 5, ly + 5, 5, ENDG, BARK);
+      }
+      if (win) B.snowCap(2, 30, 2);
+      sh = [0, 26, T, 5];
     } else if (k === "cart") {
-      R(c, "rgba(0,0,0,0.2)", x - 2, y + 28, 36, 4);
-      R(c, "#7a5230", x - 2, y + 8, 36, 14);
-      R(c, "#9a6e3e", x - 2, y + 8, 36, 3);
-      blob(c, "#4a3626", x + 4, y + 24, 6, 6, 2);
-      blob(c, "#4a3626", x + 26, y + 24, 6, 6, 2);
-      for (let i = 0; i < 4; i++) R(c, "#c49a62", x + i * 8, y + 2, 6, 7);
+      B.box(-2, 8, 36, 14, "#7a5230", { top: 3, planks: "h", pw: 4, grain: "h" });
+      for (let i = 0; i < 4; i++) B.box(i * 8, 2, 6, 7, "#c49a62", { top: 2 });           // sacks / crates in the bed
+      [4, 26].forEach((cx) => {
+        const wp = B.P("#4a3626");
+        for (let y = 18; y <= 30; y++) for (let x = cx - 6; x <= cx + 6; x++) {
+          const d = Math.hypot(x - cx, y - 24);
+          if (d > 6.2) continue;
+          if (d > 4.8) B.set(x, y, x < cx && y < 24 ? 3 : 1, wp);                        // rim
+          else if (d < 1.5) B.set(x, y, 3, B.P("#8a8a92"));                               // hub
+          else if (Math.abs(x - cx) < 0.8 || Math.abs(y - 24) < 0.8 || Math.abs(Math.abs(x - cx) - Math.abs(y - 24)) < 0.8) B.set(x, y, 2, wp);
+        }
+      });
+      sh = [-2, 28, 36, 4];
     } else if (k === "cafetable") {
-      R(c, "rgba(0,0,0,0.2)", x + 2, y + 27, 28, 4);
-      R(c, "#4b3320", x + 14, y + 14, 4, 14);
-      blob(c, "#d9d2bf", x + 16, y + 12, 13, 5, 2);
-      blob(c, "#efe8d6", x + 16, y + 11, 11, 4, 2);
-      R(c, "#c93d2f", x + 8, y + 6, 6, 6);
-      R(c, "#2f7d6d", x + 20, y + 6, 6, 6);
+      B.cylV(14, 14, 4, 14, "#4b3320");
+      B.box(10, 26, 12, 2, "#4b3320");
+      B.ball(16, 12, 13, 5, "#e6dfcc");
+      B.cylV(8, 6, 6, 6, "#c93d2f"); B.rect(8, 6, 6, 1, B.P("#f2ead3"), 3);
+      B.cylV(20, 6, 6, 6, "#2f7d6d"); B.rect(20, 6, 6, 1, B.P("#f2ead3"), 3);
     } else if (k === "dock") {
-      // a short wooden pier reaching east over the water, with a row boat tied up once you have built one
-      const len = (p.len || 3) * 32 - 8;
-      R(c, "rgba(0,0,0,0.18)", x + 8, y + 22, len + 6, 6);
-      R(c, "#7a5632", x + 4, y + 8, len, 14);
-      for (let i = 0; i < len; i += 6) R(c, i % 12 ? "#8a6439" : "#6b4a2a", x + 4 + i, y + 8, 5, 14);
-      R(c, "#4b3320", x + 4, y + 8, len, 1); R(c, "#4b3320", x + 4, y + 21, len, 1);
-      [6, len - 4].forEach((o) => { R(c, "#3a2616", x + o, y + 3, 4, 22); R(c, "#5a3d22", x + o, y + 3, 4, 2); });
+      const len = (p.len || 3) * 32 - 8, pl = B.P("#8a6439");
+      for (let x = 0; x < len; x++) for (let y = 8; y < 22; y++) {
+        const bx = x % 6;
+        let t = bx === 5 ? 0 : bx === 0 ? 3 : 2;
+        if (t === 2 && hash(x >> 2, y, 508 + Math.floor(x / 6)) > 0.85) t = 1;
+        if (y === 8) t = Math.min(4, t + 1); if (y === 21) t = 0;
+        B.set(4 + x, y, t, pl);
+      }
+      [6, len - 4].forEach((o) => { B.cylV(o, 3, 4, 22, "#3a2616"); B.rect(o, 2, 4, 1, B.P("#5a3d22"), 4); });
       const G = ACM.Game && ACM.Game.state;
       if (G && G.boat) {
-        const bx = x + len - 30, by = y + 26;
-        R(c, "rgba(0,0,0,0.2)", bx - 2, by + 11, 46, 4);
-        R(c, "#2e1c0e", bx, by + 2, 44, 10); R(c, "#9b6b3a", bx + 2, by + 3, 40, 7); R(c, "#c4965a", bx + 2, by + 3, 40, 2);
-        R(c, "#2e1c0e", bx - 4, by - 1, 6, 4); R(c, "#2e1c0e", bx + 42, by - 1, 6, 4);
-        R(c, "#6e4a24", bx + 12, by + 4, 3, 5); R(c, "#6e4a24", bx + 28, by + 4, 3, 5);
-        R(c, "#d9d2bf", bx + 8, by - 6, 2, 9); R(c, "#4b3320", bx + 6, by - 7, 10, 2);
+        const bx = len - 30, by = 26, hull = B.P("#9b6b3a");
+        for (let x = -3; x < 47; x++) for (let y = by; y < by + 12; y++) {
+          const u = (x - 22) / 25, top = by + 1 + Math.round(u * u * 3);
+          if (y < top || y > by + 11 - Math.round(u * u * 6)) continue;
+          let t = y === top ? 4 : y < top + 3 ? 3 : y > by + 8 ? 1 : 2;
+          if (x === 12 || x === 28) t = 1;
+          B.set(bx + x, y, t, hull);
+        }
+        B.line(bx + 8, by - 6, bx + 8, by + 3, "#d9d2bf", 3, 2); B.line(bx + 6, by - 7, bx + 15, by - 7, "#4b3320", 2);
       }
+      sh = [8, 22, len + 6, 6];
     } else if (k === "sign") {
-      // one compact board: small type, sized to its text (long signs become a few short lines)
-      R(c, "rgba(0,0,0,0.2)", x + 8, y + 28, 16, 3);
-      R(c, "#4b3320", x + 14, y + 8, 4, 22);
+      B.cylV(14, 8, 4, 22, "#4b3320", { grain: 1 });
+      sh = [8, 28, 16, 3];
+    } else if (k === "well") {
+      const sp = B.P(STONE);
+      for (let y = 12; y < 30; y++) for (let x = 3; x < 29; x++) {
+        const row = Math.floor((y - 12) / 5), by = (y - 12) % 5, bx = (x - 3 + (row % 2) * 4) % 8;
+        let t = by === 0 ? 4 : by === 4 || bx === 0 ? 1 : 2 + (hash(Math.floor((x - 3 + (row % 2) * 4) / 8), row, 509) > 0.55 ? 1 : 0);
+        if (x === 28) t = Math.min(t, 1);
+        B.set(x, y, t, sp);
+      }
+      const wa = B.P("#1d3550");
+      for (let y = 13; y < 18; y++) for (let x = 6; x < 26; x++) B.set(x, y, y === 13 ? 1 : (x + y) % 9 === 0 ? 3 : 0, wa);
+      B.cylV(3, -8, 3, 21, "#4b3320"); B.cylV(26, -8, 3, 21, "#4b3320");
+      B.line(6, -4, 26, -4, "#6e502e", 2, 2);
+      B.line(15, -4, 15, 8, "#c9b48a", 3); B.box(13, 6, 5, 5, "#7a5230", { top: 1 });
+      // little shingled roof
+      const rf = B.P("#7a2d2d");
+      for (let y = -16; y < -6; y++) for (let x = -2; x < 34; x++) {
+        const inset = Math.round((y + 16) * -0.2 + 2);
+        if (x < -2 + inset - 2 || x > 33 - inset + 2) continue;
+        const r2 = (y + 16) % 3, sx = (x + (Math.floor((y + 16) / 3) % 2) * 3) % 6;
+        B.set(x, y, y === -16 ? 4 : r2 === 0 ? 1 : sx === 0 ? 2 : r2 === 2 ? 3 : 2, rf);
+      }
+      if (win) B.snow(-1, -18, 34);
+    } else if (k === "flowerbed") {
+      B.box(2, 14, 28, 12, "#6a4428", { top: 2 });
+      const soil = B.P("#3f2a18");
+      for (let y = 16; y < 22; y++) for (let x = 4; x < 28; x++) B.set(x, y, hash(x, y, 510) > 0.7 ? 2 : 1, soil);
+      if (!win) {
+        const cols = season === "Autumn" ? ["#d9742a", "#e8b030", "#b9472a"] : ["#e85d75", "#f2c94c", "#ffffff", "#c04bd9"];
+        for (let i = 0; i < 7; i++) {
+          const fx2 = 4 + i * 4, fy = 8 + (i % 2) * 3;
+          B.line(fx2 + 1, fy + 3, fx2 + 1, fy + 9, "#3f8a3a", 2); B.set(fx2, fy + 6, 3, B.P("#3f8a3a")); B.set(fx2 + 2, fy + 5, 3, B.P("#3f8a3a"));
+          B.ball(fx2 + 1.5, fy + 1.5, 2.2, 2, cols[i % cols.length]);
+        }
+      } else for (let x = 3; x < 29; x++) B.set(x, 15 + (hash(x, 0, 511) > 0.6 ? 0 : 1), 4, B.P("#e6eef6"));
+      sh = null;   // sits flat in the ground: no drop shadow
+    } else if (k === "haybale") {
+      const hy = B.P("#d2b04a");
+      for (let y = 10; y < 29; y++) for (let x = 2; x < 30; x++) {
+        let t = y < 13 ? 4 : y === 28 || x === 29 ? 1 : 2 + (x === 2 ? 1 : 0);
+        if (t === 2 && hash(x, y >> 1, 512) > 0.75) t = hash(x, y, 513) > 0.5 ? 3 : 1;          // straw strands
+        B.set(x, y, t, hy);
+      }
+      [8, 21].forEach((tx) => B.rect(tx, 10, 2, 19, B.P("#7a5a2a"), 2));
+      if (win) B.snow(2, 9, 28);
+    } else if (k === "pots") {
+      const pt = B.P("#b0653a");
+      for (let y = 18; y < 28; y++) { const inset = Math.round((y - 18) * 0.25); for (let x = 10 + inset; x < 22 - inset; x++) { const u = (x - 16) / 6; B.set(x, y, B.q(0.6 - u * 0.4, x, y), pt); } }
+      B.box(8, 15, 16, 4, "#b0653a", { top: 2 });
+      if (!win) { B.ball(16, 10, 7, 5, "#4f9d48", { leaf: 1, wob: 0.15, seed: 3 }); B.line(16, 12, 16, 16, "#3f8a3a", 1); }
+      else B.snow(8, 13, 16);
+      sh = [8, 27, 16, 3];
+    } else if (k === "board") {
+      B.cylV(8, 10, 6, 52, "#4b3320", { grain: 1 }); B.cylV(82, 10, 6, 52, "#4b3320", { grain: 1 });
+      B.box(2, -2, 92, 10, "#7a2d2d", { top: 3 });
+      B.box(6, 8, 84, 40, "#3a2414");
+      const cork = B.P("#c9b484");
+      for (let y = 10; y < 46; y++) for (let x = 8; x < 88; x++) B.set(x, y, hash(x, y, 514) > 0.8 ? 3 : hash(x, y, 515) < 0.15 ? 1 : 2, cork);
+      const notes = [[12, 14, "#fffbe8"], [30, 20, "#f6e9b8"], [54, 13, "#fffbe8"], [70, 22, "#dcecf6"], [20, 32, "#f6e9b8"], [58, 31, "#fffbe8"]];
+      notes.forEach(([nx, ny, col]) => {
+        B.box(nx, ny, 14, 12, col);
+        for (let l = 0; l < 3; l++) B.rect(nx + 2, ny + 3 + l * 3, 9 - (l === 2 ? 3 : 0), 1, B.P("#8a7a5a"), 2);
+        B.set(nx + 6, ny - 1, 3, B.P("#c0392b")); B.set(nx + 7, ny - 1, 2, B.P("#c0392b")); B.set(nx + 6, ny, 1, B.P("#c0392b"));
+      });
+      if (win) B.snow(2, -4, 92);
+      sh = [2, 58, 92, 6];
+    } else if (k === "charlog") {
+      const v = p.v || 0, ch = "#2a2320";
+      if (v === 0) { B.cylH(2, 16, 26, 9, ch, { grain: 1 }); B.disc(28, 20, 4.5, "#4a3a2e", "#1c1714"); }
+      else if (v === 1) { for (let i = 0; i < 24; i++) B.cylH(4 + i, 22 - Math.round(i * 0.75), 2, 7, ch); }
+      else { B.cylV(6, 8, 7, 20, ch, { grain: 1 }); B.cylV(16, 14, 12, 12, ch, { grain: 1 }); }
+      for (let i = 0; i < 6; i++) { const xx = 6 + Math.floor(hash(i, v, 516) * 20), yy = 12 + Math.floor(hash(i, v, 517) * 12); if (B.get(xx, yy) >= 0) B.set(xx, yy, 3, B.P("#c2562a")); }   // embers in the cracks
+      sh = [2, 24, 28, 5];
+    } else if (k === "planter") {
+      B.box(2, 14, 28, 14, fx ? "#8a5a30" : "#6a5a48", { top: 3, planks: "v", pw: 7 });
+      if (fx) {
+        for (let y = 12; y < 16; y++) for (let x = 4; x < 28; x++) B.set(x, y, 1, B.P("#3a2a18"));
+        for (let i = 0; i < 5; i++) { B.line(6 + i * 5, 6, 6 + i * 5, 13, "#3f8c47", 2); B.ball(5.5 + i * 5, 4.5, 2.6, 2.4, ["#e8566a", "#f2c230", "#ffffff", "#c27ae0", "#e8566a"][i]); }
+      } else { B.line(12, 14, 12, 27, "#1b120a", 0); B.line(20, 20, 27, 20, "#1b120a", 0); B.line(9, 11, 9, 14, "#6b5a3a", 2); B.line(22, 10, 24, 14, "#6b5a3a", 2); }
+      sh = [1, 27, 30, 4];
+    } else if (k === "kiosk") {
+      const t = fx ? 0 : 3;
+      B.cylV(5 + t, -6, 4, 34, "#5a3a1c"); B.cylV(23 + t, -6, 4, 34, "#5a3a1c");
+      B.box(2 + t, -14, 28, 6, "#7b5431", { top: 2 });
+      B.box(0, -18 + t, 32, 6, "#3d5a40", { top: 2 });
+      B.box(9 + t, -6, 14, 16, "#e8d9ae");
+      B.box(11 + t, -4, 10, 6, fx ? "#4e7a4a" : "#6b7a5a"); B.box(11 + t, 3, 10, 3, "#5a8ab0");
+      if (!fx) { B.line(9 + t, -6, 9 + t, 2, "#1b120a", 0); B.box(20 + t, 12, 8, 6, "#e8d9ae"); B.box(22, 26, 10, 3, "#5a3a1c"); }
+      sh = [2, 28, 28, 4];
+    } else if (k === "birdhouse") {
+      B.cylV(14, -4, 4, 32, "#5a3a1c", { grain: 1 });
+      if (fx) {
+        B.box(7, -14, 18, 14, "#c9744a", { planks: "v", pw: 4 });
+        for (let i = 0; i < 8; i++) { B.line(4 + i, -20 + i * 0.75 * 0, 4 + i, -14, "#8a3b2e", i < 2 ? 3 : 2); }
+        B.box(4, -20, 24, 7, "#8a3b2e", { top: 2 });
+        B.ball(16, -7, 3, 3, "#2a1d12"); B.box(14, -3, 4, 2, "#e2b04a");
+        B.ball(23.5, -22, 2.5, 2.2, "#f2c230"); B.set(25, -23, 0, B.P("#2a1d12"));
+      } else { B.box(9, -8, 14, 10, "#8a6a45"); B.box(6, -12, 12, 5, "#6a4a2a"); B.rect(12, -4, 6, 5, B.P("#1b120a"), 1); B.box(20, 20, 8, 4, "#6a4a2a"); }
+      sh = [8, 28, 16, 3];
+    } else if (k === "rocker") {
+      const wd = fx ? "#a8743f" : "#8a6a45";
+      B.cylV(8, -8, 4, 24, wd, { grain: 1 }); B.box(6, -10, 8, 3, fx ? "#c49656" : "#9a7a50", { top: 1 });
+      B.box(12, -2, 14, 4, wd, { top: 1, grain: "h" }); B.cylV(20, 2, 4, 14, wd);
+      for (let x = 4; x < (fx ? 30 : 14); x++) B.set(x, 18 + Math.round(((x - 17) / 13) ** 2 * 2), 2, B.P("#6e502e"));
+      B.line(6, 21, 28, 21, "#6e502e", 1, 1);
+      if (!fx) { B.rect(14, -2, 2, 5, B.P("#1b120a"), 1); B.box(22, 22, 8, 3, "#6e502e"); B.box(18, 20, 5, 3, "#6a4a2a"); }
+      else B.box(12, 4, 10, 4, "#d9a43a", { top: 1 });
+    } else if (k === "totes") {
+      B.cylV(4, -8, 4, 36, "#6e502e"); B.cylV(24, -8, 4, 36, "#6e502e"); B.box(2, -10, 28, 4, "#7b5431", { top: 1 });
+      [[8, "#c0392b"], [16, "#2f7d6d"], [22, "#d9a43a"]].forEach(([dx, cc], i) => {
+        const hang = fx || i !== 1, yy = -4 + (hang ? 0 : 6);
+        B.box(dx, yy, 7, 12, cc, { grain: "v" }); B.rect(dx + 1, yy + 4, 5, 2, B.P("#f2ead3"), 3);
+        if (!fx && i === 1) B.line(dx + 2, yy + 8, dx + 2, yy + 11, "#1b120a", 0);
+      });
+      if (!fx) B.box(2, 22, 8, 5, "#c0392b");
+    } else {
+      return false;   // unknown kind
+    }
+    return sh;
+  }
+
+  const propCache = {};
+  function propSprite(p, season) {
+    const fx = p.kind === "bench" ? (!p.fix || ACM.Repairs.fixed(p.fix)) : !!(p.fix && ACM.Repairs.fixed(p.fix));
+    let extra = "";
+    if (p.kind === "fence") extra = (M.fenceKeys.has(p.tx + 1 + "," + p.ty) ? "r" : "") + (M.fenceKeys.has(p.tx + "," + (p.ty + 1)) ? "d" : "");
+    else if (p.kind === "dock") extra = (p.len || 3) + (ACM.Game && ACM.Game.state && ACM.Game.state.boat ? "b" : "");
+    else if (p.kind === "sign") extra = p.text || "";
+    else if (p.kind === "logpile" || p.kind === "charlog") extra = String(p.v || 0);
+    const key = p.kind + "|" + season + "|" + (fx ? 1 : 0) + "|" + extra;
+    if (propCache[key] !== undefined) return propCache[key];
+    const B = PBuf(), sh = paintProp(B, p, season, fx);
+    if (sh === false) return (propCache[key] = null);
+    B.outline();
+    const cv = B.canvas(sh), c = cv.getContext("2d");
+    // lettering goes on after the pixels
+    if (p.kind === "sign") {
       const lines = String(p.text || "").split("  ").map((l) => l.trim()).filter(Boolean);
       c.font = 'bold 7px "Trebuchet MS", sans-serif';
-      const bw = Math.ceil(Math.max(...lines.map((l) => c.measureText(l).width))) + 8, bh = lines.length * 8 + 4, top = y + 10 - bh;
-      R(c, "#2a1a0e", x + 16 - bw / 2 - 1, top - 1, bw + 2, bh + 2);
-      R(c, "#6b4a2c", x + 16 - bw / 2, top, bw, bh);
-      R(c, "#7e5a37", x + 16 - bw / 2, top, bw, 1);
+      const bw = Math.ceil(Math.max(...lines.map((l) => c.measureText(l).width))) + 8, bh = lines.length * 8 + 4, top = 10 - bh, ox = POX + 16 - bw / 2;
+      c.fillStyle = "#2a1a0e"; c.fillRect(ox - 1, top - 1 + POY, bw + 2, bh + 2);
+      const g = c.createLinearGradient(0, top + POY, 0, top + POY + bh); g.addColorStop(0, "#8a6440"); g.addColorStop(1, "#5a3c22");
+      c.fillStyle = g; c.fillRect(ox, top + POY, bw, bh);
+      c.fillStyle = "#a07a50"; c.fillRect(ox, top + POY, bw, 1);
+      c.fillStyle = "#3a2414"; c.fillRect(ox, top + POY + bh - 1, bw, 1);
       c.fillStyle = "#f6e7bf"; c.textAlign = "center"; c.textBaseline = "top";
-      lines.forEach((ln, i) => c.fillText(ln, x + 16, top + 3 + i * 8));
-    } else if (k === "well") {
-      R(c, "rgba(0,0,0,0.2)", x + 2, y + 28, 28, 4);
-      R(c, "#8a8478", x + 3, y + 12, 26, 18);
-      for (let i = 0; i < 26; i += 8) R(c, "#6b655a", x + 3 + i, y + 12, 1, 18);
-      R(c, "#a49e90", x + 3, y + 12, 26, 3);
-      R(c, "#1d3550", x + 7, y + 14, 18, 5);
-      R(c, "#4b3320", x + 3, y - 8, 3, 22);
-      R(c, "#4b3320", x + 26, y - 8, 3, 22);
-      R(c, "#7a2d2d", x - 1, y - 14, 34, 8);
-      R(c, "#a04040", x - 1, y - 14, 34, 2);
-      R(c, "#9a8a6a", x + 15, y - 6, 2, 12);
-      if (season === "Winter") R(c, "#f2f7fb", x - 1, y - 16, 34, 3);
-    } else if (k === "flowerbed") {
-      R(c, "#5a3a22", x + 2, y + 14, 28, 12);
-      R(c, "#3f2a18", x + 2, y + 22, 28, 4);
-      const cols = season === "Winter" ? ["#ffffff", "#c9d9e6"] : season === "Autumn" ? ["#d9742a", "#e8b030", "#b9472a"] : ["#e85d75", "#f2c94c", "#ffffff", "#c04bd9"];
-      if (season !== "Winter") for (let i = 0; i < 7; i++) R(c, "#3f8a3a", x + 4 + i * 4, y + 10 + (i % 2) * 3, 2, 8);
-      for (let i = 0; i < 7; i++) R(c, cols[i % cols.length], x + 3 + i * 4, y + 8 + (i % 2) * 3 + (season === "Winter" ? 6 : 0), 4, 4);
-    } else if (k === "haybale") {
-      R(c, "rgba(0,0,0,0.2)", x + 2, y + 27, 28, 4);
-      R(c, "#d2b04a", x + 2, y + 10, 28, 19);
-      R(c, "#e6c866", x + 2, y + 10, 28, 3);
-      for (let i = 0; i < 4; i++) R(c, "#a88a30", x + 2, y + 15 + i * 4, 28, 1);
-      R(c, "#7a5a2a", x + 8, y + 10, 2, 19);
-      R(c, "#7a5a2a", x + 21, y + 10, 2, 19);
-    } else if (k === "pots") {
-      R(c, "#b0653a", x + 10, y + 18, 12, 10);
-      R(c, "#8a4a28", x + 8, y + 16, 16, 4);
-      if (season !== "Winter") {
-        R(c, "#3f8a3a", x + 14, y + 8, 4, 10);
-        R(c, "#4f9d48", x + 9, y + 10, 6, 4);
-        R(c, "#4f9d48", x + 17, y + 11, 6, 4);
-      } else R(c, "#f2f7fb", x + 8, y + 14, 16, 3);
-    } else if (k === "board") {
-      R(c, "rgba(0,0,0,0.22)", x + 2, y + 58, 92, 6);
-      R(c, "#4b3320", x + 8, y + 10, 6, 52);
-      R(c, "#4b3320", x + 82, y + 10, 6, 52);
-      R(c, "#7a2d2d", x + 2, y - 2, 92, 10);
-      R(c, "#a04040", x + 2, y - 2, 92, 3);
-      R(c, "#3a2414", x + 6, y + 8, 84, 40);
-      R(c, "#d9c9a0", x + 8, y + 10, 80, 36);
-      R(c, "#c4b080", x + 48, y + 10, 1, 36);
-      const notes = [[12, 14, "#fffbe8"], [30, 20, "#f6e9b8"], [54, 13, "#fffbe8"], [70, 22, "#dcecf6"], [20, 32, "#f6e9b8"], [58, 31, "#fffbe8"]];
-      notes.forEach(([nx, ny, col], i) => {
-        R(c, "rgba(0,0,0,0.2)", x + nx + 1, y + ny + 1, 14, 12);
-        R(c, col, x + nx, y + ny, 14, 12);
-        R(c, "#c0392b", x + nx + 6, y + ny - 1, 2, 2);
-        for (let l = 0; l < 3; l++) R(c, "#8a7a5a", x + nx + 2, y + ny + 3 + l * 3, 9 - (l === 2 ? 3 : 0), 1);
-      });
-      c.font = 'bold 8px "Trebuchet MS", sans-serif';
-      c.fillStyle = "#f6e7bf";
-      c.textAlign = "center";
-      c.textBaseline = "middle";
-      c.fillText("COMMISSIONS", x + 48, y + 3);
-      if (season === "Winter") R(c, "#f2f7fb", x + 2, y - 5, 92, 4);
-    } else if (k === "charlog") {
-      R(c, "rgba(0,0,0,0.25)", x + 2, y + 24, 28, 5);
-      const v = p.v || 0;
-      if (v === 0) { R(c, "#1c1714", x + 2, y + 16, 28, 9); R(c, "#38302a", x + 2, y + 16, 28, 2); R(c, "#4a3a2e", x + 24, y + 18, 5, 5); }
-      else if (v === 1) { beam(c, "#1c1714", x + 4, y + 26, x + 28, y + 8, 7); R(c, "#38302a", x + 12, y + 16, 3, 3); }
-      else { R(c, "#1c1714", x + 6, y + 8, 7, 20); R(c, "#1c1714", x + 16, y + 14, 12, 12); R(c, "#38302a", x + 6, y + 8, 2, 20); }
+      lines.forEach((ln, i) => c.fillText(ln, POX + 16, top + POY + 3 + i * 8));
+      if (season === "Winter") { c.fillStyle = "#eef5fa"; c.fillRect(ox - 1, top + POY - 3, bw + 2, 2); }
+    } else if (p.kind === "board") {
+      c.font = 'bold 8px "Trebuchet MS", sans-serif'; c.fillStyle = "#f6e7bf"; c.textAlign = "center"; c.textBaseline = "middle";
+      c.fillText("COMMISSIONS", POX + 48, POY + 3);
     }
+    return (propCache[key] = { cv, ox: POX, oy: POY });
+  }
+
+  function drawProp(c, p, season, tick) {
+    const sp = propSprite(p, season);
+    if (sp) c.drawImage(sp.cv, p.tx * T - sp.ox, p.ty * T - sp.oy);
+  }
+
+  const scenCache = {};
+  function scenerySprite(s, season) {
+    const v = s.v || 0, key = s.kind + "|" + v + "|" + season;
+    if (scenCache[key] !== undefined) return scenCache[key];
+    const B = PBuf(), win = season === "Winter";
+    let sh = [3, 25, 26, 5];
+    if (s.kind === "bush") {
+      const cols = win ? ["#a9bccc", "#cfdde8"] : season === "Autumn" ? ["#9a6420", "#c58428"] : ["#2f7a3a", "#4a9a4a"];
+      B.ball(16, 20, 14, 8, cols[0], { leaf: 1, wob: 0.12, seed: v });
+      B.ball(14, 17, 11, 7, cols[1], { leaf: 1, wob: 0.12, seed: v + 3 });
+      if (v === 1 && (season === "Spring" || season === "Summer")) [[8, 15, "#e85d75"], [20, 19, "#e85d75"], [15, 12, "#f2c94c"], [11, 20, "#ffffff"]].forEach(([xx, yy, cc]) => B.ball(xx + 1.5, yy + 1.5, 1.8, 1.6, cc));
+      if (v === 2 && !win) [[9, 18], [19, 15], [15, 21], [22, 20]].forEach(([xx, yy]) => B.ball(xx + 1.5, yy + 1.5, 1.7, 1.6, "#c0392b"));
+      if (win) B.snowCap(3, 30, 3);
+    } else if (s.kind === "rock") {
+      B.ball(16, 21, 12 - v, 8, "#8a8f96", { facet: 1, seed: v });
+      if (v === 1) B.ball(25, 24, 5, 4, "#7b7f86", { facet: 1, seed: 9 });
+      // a crack and some moss
+      for (let i = 0; i < 5; i++) if (B.get(14 + i, 18 + (i % 2)) >= 0) B.set(14 + i, 18 + (i % 2), 0, B.P("#8a8f96"));
+      if (win) B.snowCap(4, 30, 2);
+      else if (season !== "Autumn") for (let x = 6; x < 14; x++) if (B.get(x, 24) >= 0) B.set(x, 24 - (x % 3 === 0 ? 1 : 0), x % 2 ? 2 : 3, B.P("#5fa04e"));
+    } else if (s.kind === "stump") {
+      B.cylV(7, 14, 18, 14, BARK, { grain: 1 });
+      [[5, 26], [25, 26]].forEach(([xx, yy]) => B.box(xx, yy, 3, 2, BARK));
+      const top = B.P(ENDG);
+      for (let y = 10; y < 18; y++) for (let x = 7; x < 25; x++) {
+        const dx = (x + 0.5 - 16) / 9, dy = (y + 0.5 - 14) / 4;
+        const d = Math.sqrt(dx * dx + dy * dy); if (d > 1) continue;
+        B.set(x, y, d > 0.85 ? 1 : (Math.floor(d * 5) % 2 ? 2 : 3) + (dx < 0 && dy < 0 ? 1 : 0), d > 0.85 ? B.P(BARK) : top);
+      }
+      if (win) B.snow(8, 10, 16);
+      sh = [4, 25, 24, 5];
+    } else if (s.kind === "mushroom") {
+      B.cylV(14, 20, 3, 6, "#efe8d4");
+      B.ball(15.5, 19, 5, 3, v ? "#c0392b" : "#b0763c");
+      if (v) { B.set(13, 18, 4, B.P("#ffffff")); B.set(17, 19, 4, B.P("#ffffff")); }
+      sh = [12, 25, 8, 2];
+    } else return (scenCache[key] = null);
+    B.outline();
+    return (scenCache[key] = { cv: B.canvas(sh), ox: POX, oy: POY });
   }
 
   function drawScenery(c, s, season) {
-    const x = s.tx * T, y = s.ty * T, v = s.v || 0;
-    if (s.kind === "bush") {
-      R(c, "rgba(0,0,0,0.2)", x + 3, y + 25, 26, 5);
-      const cols = season === "Winter" ? ["#9fb4c4", "#bccfdd", "#e7f0f7"] : season === "Autumn" ? ["#8a5a1e", "#b8761e", "#d99a38"] : ["#2f7a3a", "#3f9248", "#5bb25d"];
-      blob(c, cols[0], x + 16, y + 20, 14, 8, 2);
-      blob(c, cols[1], x + 14, y + 17, 11, 7, 2);
-      blob(c, cols[2], x + 11, y + 14, 5, 3, 1);
-      if (v === 1 && (season === "Spring" || season === "Summer")) { R(c, "#e85d75", x + 8, y + 15, 3, 3); R(c, "#e85d75", x + 20, y + 19, 3, 3); R(c, "#f2c94c", x + 15, y + 12, 3, 3); }
-      if (v === 2 && season !== "Winter") { R(c, "#c0392b", x + 9, y + 18, 3, 3); R(c, "#c0392b", x + 19, y + 15, 3, 3); R(c, "#c0392b", x + 15, y + 21, 3, 3); }
-    } else if (s.kind === "rock") {
-      R(c, "rgba(0,0,0,0.22)", x + 3, y + 25, 26, 5);
-      blob(c, "#7b7f86", x + 16, y + 21, 12 - v, 8, 2);
-      blob(c, "#9aa0a8", x + 14, y + 18, 9 - v, 6, 2);
-      blob(c, "#bcc2c9", x + 11, y + 15, 4, 2, 1);
-      if (v === 1) { blob(c, "#6e7279", x + 24, y + 24, 5, 4, 1); }
-      if (season === "Winter") R(c, "#f2f7fb", x + 8, y + 13, 14, 3);
-      else if (season !== "Autumn") R(c, "#5fa04e", x + 6, y + 22, 6, 2);
-    } else if (s.kind === "stump") {
-      R(c, "rgba(0,0,0,0.22)", x + 4, y + 25, 24, 5);
-      R(c, "#5a3b22", x + 7, y + 14, 18, 14);
-      R(c, "#7a5232", x + 7, y + 14, 5, 14);
-      blob(c, "#c8a068", x + 16, y + 14, 9, 4, 2);
-      blob(c, "#a98048", x + 16, y + 14, 5, 2, 1);
-      if (season === "Winter") R(c, "#f2f7fb", x + 8, y + 11, 16, 3);
-    } else if (s.kind === "mushroom") {
-      R(c, "#efe8d4", x + 14, y + 20, 3, 6);
-      blob(c, v ? "#c0392b" : "#b0763c", x + 15, y + 19, 5, 3, 1);
-      R(c, "#ffffff", x + 13, y + 18, 1, 1);
-    }
+    const sp = scenerySprite(s, season);
+    if (sp) c.drawImage(sp.cv, s.tx * T - sp.ox, s.ty * T - sp.oy);
   }
 
   const FORAGE_COL = { blueberry: "#3b4a9b", raspberry: "#d6405a", cranberry: "#b3202f", morel: "#a98a5a", chanterelle: "#e8a93a" };
+  const forageCache = {};
+  function forageSprite(kind, item) {
+    const key = kind + "|" + (item || "");
+    if (forageCache[key] !== undefined) return forageCache[key];
+    const B = PBuf();
+    let sh = [6, 24, 20, 4];
+    if (kind === "bush") {
+      B.ball(16, 21, 10, 6, "#2d6e36", { leaf: 1, wob: 0.12, seed: 2 });
+      B.ball(14, 18, 8, 5, "#3f8c47", { leaf: 1, wob: 0.12, seed: 5 });
+      if (item) [[9, 17], [19, 20], [14, 21], [21, 16], [12, 14]].forEach(([xx, yy]) => B.ball(xx + 1.5, yy + 1.5, 1.8, 1.7, FORAGE_COL[item]));
+    } else if (item) {
+      B.cylV(11, 20, 3, 5, "#efe8d4"); B.cylV(19, 21, 3, 4, "#efe8d4");
+      B.ball(12.5, 19, 5, 3, FORAGE_COL[item]); B.ball(20.5, 20, 4, 3, FORAGE_COL[item]);
+      sh = [8, 24, 16, 3];
+    } else return (forageCache[key] = null);
+    B.outline();
+    return (forageCache[key] = { cv: B.canvas(sh), ox: POX, oy: POY });
+  }
   // Wild forage. Bushes are always drawn (berries show when ripe); mushrooms appear only when there is something to pick.
   function drawForage(c, f, item, tick) {
+    const sp = forageSprite(f.kind, item);
+    if (!sp) return;
     const x = f.tx * T, y = f.ty * T;
-    if (f.kind === "bush") {
-      const winter = false;
-      R(c, "rgba(0,0,0,0.18)", x + 6, y + 24, 20, 4);
-      blob(c, "#2d6e36", x + 16, y + 21, 10, 6, 2);
-      blob(c, "#3f8c47", x + 14, y + 18, 8, 5, 2);
-      blob(c, "#5bb25d", x + 11, y + 16, 3, 2, 1);
-      if (item) {
-        const col = FORAGE_COL[item];
-        [[9, 17], [19, 20], [14, 21], [21, 16], [12, 14]].forEach((p) => R(c, col, x + p[0], y + p[1], 3, 3));
-        const s = 0.5 + 0.5 * Math.sin(tick / 16 + f.tx);
-        if (s > 0.9) R(c, "#fff6c8", x + 22, y + 13, 2, 2);
-      }
-    } else if (item) {
-      const col = FORAGE_COL[item];
-      R(c, "rgba(0,0,0,0.15)", x + 8, y + 24, 16, 3);
-      R(c, "#efe8d4", x + 11, y + 20, 3, 5); R(c, "#efe8d4", x + 19, y + 21, 3, 4);
-      blob(c, col, x + 12, y + 19, 5, 3, 1); blob(c, col, x + 20, y + 20, 4, 3, 1);
-    }
+    c.drawImage(sp.cv, x - sp.ox, y - sp.oy);
+    if (f.kind === "bush" && item && 0.5 + 0.5 * Math.sin(tick / 16 + f.tx) > 0.9) { R(c, "#fff6c8", x + 22, y + 13, 2, 2); R(c, "rgba(255,246,200,0.5)", x + 21, y + 14, 4, 1); }
   }
 
   /* ------------------------------------------------------------------ misc world overlays */
@@ -1327,6 +1550,8 @@ ACM.ArtWorld = (function () {
     drawClockAndEnergy,
     SPECIES,
     getGround,
+    propSprite,
+    scenerySprite,
     ensureGround,
     warmGround,
     getWorkshop,
