@@ -819,10 +819,6 @@ table.shop-table th {
 }
 
 /* ---- mission card, bulletin, phone, full screen (round 3a) ---- */
-#mission-card { position: absolute; left: 10px; top: 78px; width: 210px; background: rgba(35, 22, 12, 0.86); border: 2px solid var(--brass); border-radius: 6px; padding: 5px 8px; font-size: 11.5px; line-height: 1.3; color: #f6e7bf; cursor: pointer; z-index: 6; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
-#mission-card.hidden { display: none; }
-#mission-card .mc-head { display: flex; justify-content: space-between; font-weight: bold; color: #ffd84a; font-size: 0.7rem; letter-spacing: 0.02em; }
-#mission-card .mc-body { margin-top: 3px; max-height: 6.2em; overflow: hidden; }
 #bulletin { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); width: min(440px, 92%); background: #f3e6c4; color: #3a2616; border: 3px solid #6b4a2c; border-radius: 4px; padding: 8px 12px; z-index: 8; box-shadow: 0 6px 18px rgba(0,0,0,0.5); animation: blIn 0.45s ease-out; text-align: left; }
 #bulletin.out { opacity: 0; transition: opacity 0.4s; }
 #bulletin .bl-head { font-weight: bold; display: flex; justify-content: space-between; border-bottom: 1px dashed #6b4a2c; padding-bottom: 3px; margin-bottom: 4px; }

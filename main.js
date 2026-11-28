@@ -1569,7 +1569,9 @@ ACM.Game = (function () {
 
   /** Esc: the whole game stops (clock, energy, the squirrel, walking) while this window is open. */
   function openPause() {
+    const ms = mission();
     openModal("⏸ Paused", `<p class="item-meta">The game is paused. Time, energy and everything else stand still until you resume.</p>
+      <div class="tut-box" style="margin:8px 0;"><strong>★ Current mission</strong><div style="margin-top:4px;">${ms ? ms.html : "Look around the village, take on a commission at the Town Hall board, or visit your neighbours."}</div></div>
       <div class="dialog-actions" style="flex-wrap:wrap;gap:6px">
         <button class="btn-brass" id="ps-resume" data-space>Resume</button>
         <button class="btn-wood btn-sm" id="ps-phone">📱 Phone</button>
