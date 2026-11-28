@@ -51,88 +51,234 @@ ACM.ArtBuildings = (function () {
   const cache = {};
 
   /* ---------------------------------------------------------- wall surfaces */
-  function wallPattern(c, style, x0, y0, w, h, col) {
-    R(c, col, x0, y0, w, h);
+  /* ---------------- per-pixel material helpers ----------------
+     pix() runs fn(x, y) for every pixel of a rectangle in the context's current (translated) space and
+     writes the [r,g,b] it returns; null keeps the pixel. Building sprites are cached, so this runs once. */
+  function pix(c, x0, y0, w, h, fn) {
+    const m = c.getTransform(), X = Math.round(x0 + m.e), Y = Math.round(y0 + m.f);
+    const cx0 = Math.max(0, X), cy0 = Math.max(0, Y), cx1 = Math.min(c.canvas.width, X + Math.round(w)), cy1 = Math.min(c.canvas.height, Y + Math.round(h));
+    if (cx1 <= cx0 || cy1 <= cy0) return;
+    const img = c.getImageData(cx0, cy0, cx1 - cx0, cy1 - cy0), d = img.data, iw = cx1 - cx0;
+    for (let yy = cy0; yy < cy1; yy++) for (let xx = cx0; xx < cx1; xx++) {
+      const col = fn(xx - m.e, yy - m.f);
+      if (!col) continue;
+      const i = ((yy - cy0) * iw + (xx - cx0)) * 4;
+      d[i] = col[0]; d[i + 1] = col[1]; d[i + 2] = col[2]; d[i + 3] = 255;
+    }
+    c.putImageData(img, cx0, cy0);
+  }
+  const hexA = (h) => U.parse(h);
+  const mixA = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  /* 6 tones, darkest drifting cool, lightest drifting warm: [d3, d2, d1, b, l1, l2] */
+  function tones(hex) {
+    const b = hexA(hex);
+    const dk = (f) => mixA([b[0] * f, b[1] * f, b[2] * f], [24, 26, 52], (1 - f) * 0.45);
+    const lt = (t) => mixA(b, [255, 246, 214], t);
+    return [dk(0.45), dk(0.62), dk(0.8), b, lt(0.16), lt(0.34)];
+  }
+  const hh = (x, y, s) => M.hash(x, y, s);
+
+  function wallRich(c, style, x0, y0, w, h, col) {
+    const Tn = tones(col);
     if (style === "clapboard") {
-      for (let y = y0 + 5, k = 0; y < y0 + h; y += 6, k++) {
-        R(c, shade(col, -0.16), x0, y, w, 1);
-        R(c, shade(col, 0.1), x0, y + 1, w, 1);
-      }
+      pix(c, x0, y0, w, h, (x, y) => {
+        const ly = y - y0, k = Math.floor(ly / 6), by = ly % 6;
+        let t = by === 0 ? 1 : by === 1 ? 2 : by === 5 ? 4 : 3;
+        if (by >= 2 && by <= 4 && hh(Math.floor(x / 7) + k * 31, by + k, 401) > 0.94) t = 2;                  // grain streak
+        if (by >= 1 && Math.floor(hh(k, Math.floor((x - x0) / 110), 402) * 110) === (x - x0) % 110) t = 1;   // butt joint
+        if (by >= 2 && by <= 4 && hh(x, y, 403) > 0.985) t = Math.min(5, t + 1);                              // paint fleck
+        return Tn[t];
+      });
     } else if (style === "plank") {
-      for (let x = x0, k = 0; x < x0 + w; x += 8, k++) {
-        if (k % 2) R(c, shade(col, 0.06), x, y0, 8, h);
-        R(c, shade(col, -0.25), x, y0, 1, h);
-        const hh = M.hash(k, y0, 77);
-        if (hh < 0.35) R(c, shade(col, -0.3), x + 3, y0 + 10 + Math.floor(hh * 90) % Math.max(10, h - 20), 2, 3);
-      }
+      pix(c, x0, y0, w, h, (x, y) => {
+        const lx = x - x0, k = Math.floor(lx / 8), bx = lx % 8, ly = y - y0;
+        let t = bx === 0 ? 0 : bx === 1 ? 4 : bx === 7 ? 2 : 3;
+        if (bx > 1 && bx < 7 && hh(x, Math.floor(y / 6), 404) > 0.82) t = 2;                                   // vertical grain
+        const ky = 14 + Math.floor(hh(k, y0, 405) * Math.max(1, h - 28));                                       // a knot per board
+        if (bx >= 3 && bx <= 5 && Math.abs(ly - ky) <= 1 && hh(k, 1, 406) < 0.5) t = (bx === 4 && ly === ky) ? 0 : 1;
+        if ((ly === 4 || ly === h - 6) && bx === 4) return [200, 204, 210];                                     // nail heads
+        return Tn[t];
+      });
     } else if (style === "log") {
-      for (let y = y0, k = 0; y < y0 + h; y += 8, k++) {
-        R(c, shade(col, k % 2 ? -0.07 : 0.05), x0, y, w, 7);
-        R(c, shade(col, 0.16), x0, y + 1, w, 1);
-        R(c, shade(col, -0.34), x0, y + 7, w, 1);
-        for (let x = x0 + 6 + ((k * 23) % 31); x < x0 + w - 8; x += 37) R(c, shade(col, -0.2), x, y + 3, 7, 1);
-        R(c, shade(col, 0.2), x0, y, 5, 7);
-        R(c, shade(col, 0.2), x0 + w - 5, y, 5, 7);
-        R(c, shade(col, -0.25), x0 + 2, y + 2, 1, 3);
-      }
-    } else if (style === "stone") {
-      for (let y = y0, row = 0; y < y0 + h; y += 10, row++) {
-        const off = row % 2 ? 10 : 0;
-        for (let x = x0 - off; x < x0 + w; x += 20) {
-          const t = M.hash(x, y, 31);
-          const cx = Math.max(x0, x),
-            cw = Math.min(x0 + w, x + 20) - cx;
-          if (cw > 0) R(c, shade(col, (t - 0.5) * 0.18), cx, y, cw, 10);
-          if (x >= x0) R(c, shade(col, -0.3), x, y, 1, 10);
+      const chink = mixA(hexA("#d8c8a4"), hexA(col), 0.25);
+      pix(c, x0, y0, w, h, (x, y) => {
+        const ly = y - y0, k = Math.floor(ly / 8), ry = ly % 8, lx = x - x0;
+        const endL = lx < 6, endR = lx >= w - 6;
+        if (endL || endR) {
+          // round end grain with growth rings
+          const cx = endL ? 2.5 : w - 3.5, d = Math.hypot(lx - cx, ry - 3.2);
+          if (d > 3.9) return ry === 7 ? chink : Tn[1];
+          const ring = Math.floor(d * 1.3) % 2;
+          return mixA(hexA(shade(col, 0.35)), Tn[2], ring ? 0.45 : 0.1);
         }
-        R(c, shade(col, -0.3), x0, y + 9, w, 1);
-        R(c, shade(col, 0.18), x0, y, w, 1);
-      }
+        if (ry === 7) return hh(x >> 1, k, 407) > 0.9 ? mixA(chink, Tn[1], 0.4) : chink;
+        let t = [3, 4, 5, 4, 3, 3, 2, 1][ry];
+        if (ry >= 2 && ry <= 5 && hh(Math.floor(x / 6) + k * 17, ry, 408) > 0.8) t--;                         // bark streaks
+        if (hh(Math.floor(x / 37) + k * 7, k, 409) > 0.93 && ry >= 2 && ry <= 4) t = Math.max(0, t - 2);       // knots/checks
+        return Tn[t];
+      });
+    } else if (style === "stone") {
+      pix(c, x0, y0, w, h, (x, y) => {
+        const ly = y - y0, row = Math.floor(ly / 10), by = ly % 10;
+        const off = row % 2 ? 11 : 0, lx = x - x0 + off;
+        // variable-width blocks per row
+        let bx0 = 0, bw = 0, id = 0;
+        for (let s = 0, k = 0; s <= lx; k++) { bw = 16 + Math.floor(hh(k, row, 410) * 12); bx0 = s; id = k; s += bw; }
+        const bx = lx - bx0;
+        if (by === 0 || bx === 0) return Tn[1];                                                                 // mortar
+        const v = (hh(id, row, 411) - 0.5) * 1.2;
+        let t = 3 + Math.round(v * 0.8);
+        if (by === 1 || bx === 1) t = 4 + (v > 0.2 ? 1 : 0);
+        else if (by === 9 || bx === bw - 1) t = 2;
+        if (hh(x, y, 412) > 0.93) t = Math.max(1, t - 1);
+        return Tn[Math.max(0, Math.min(5, t))];
+      });
+    } else {
+      R(c, col, x0, y0, w, h);
     }
   }
 
-  function drawWindow(c, cx, y, wall, trim, season, shutters) {
-    const w = 22, h = 26, x = Math.round(cx - w / 2);
+  function roofRich(c, w, roofH, col, season) {
+    const Tn = tones(col), left = (y) => Math.round(18 - 26 * (y / roofH));
+    pix(c, -8, 0, w + 16, roofH, (x, y) => {
+      const l = left(y);
+      if (x < l || x >= w - l) return null;
+      if (y < 3) return Tn[y === 0 ? 5 : 4];                                                                    // ridge cap
+      if (y >= roofH - 3) return Tn[y === roofH - 3 ? 2 : 1];                                                   // fascia / eave lip
+      const row = Math.floor((y - 3) / 5), sy = (y - 3) % 5, sx = ((x - l) + (row % 2) * 4 + 64) % 8, sid = Math.floor(((x - l) + (row % 2) * 4) / 8);
+      let t = sy === 0 ? 1 : sy === 1 ? 2 : sy === 4 ? 4 : 3;
+      if (sx === 0 && sy > 0) t = 2;
+      const v = hh(sid, row, 420);
+      if (v > 0.93 && sy > 0) t = Math.min(5, t + 1); else if (v < 0.06 && sy > 0) t = Math.max(0, t - 1);    // weathered shingles
+      // gentle light falloff: brighter toward the upper left of the roof
+      const fx = (x - l) / Math.max(1, w - 2 * l);
+      if (fx > 0.7 && t > 1 && (fx > 0.85 || sy !== 4)) t--;
+      if (fx < 0.12 && sy >= 2 && t < 5) t++;
+      return Tn[t];
+    });
+    R(c, "rgba(0,0,0,0.30)", -8, roofH, w + 16, 5);
+    if (season === "Winter") {
+      const S = tones("#e6eef6");
+      pix(c, -8, 0, w + 16, roofH, (x, y) => {
+        const l = left(y); if (x < l || x >= w - l) return null;
+        const lim = roofH * 0.5 + (hh(x >> 2, 0, 423) * 8);
+        if (y > lim) return null;
+        return S[y > lim - 2 ? 2 : (x - l) / Math.max(1, w - 2 * l) > 0.7 ? 3 : 4];
+      });
+      // icicles at the eave
+      for (let x = 0; x < w; x += 7) { const n = 2 + Math.floor(hh(x, roofH, 424) * 5); R(c, "#dbe8f2", x, roofH - 1, 2, n); R(c, "#ffffff", x, roofH - 1, 1, Math.max(1, n - 2)); }
+    }
+  }
+
+  function windowRich(c, cx, y, wall, trim, season, shutters) {
+    const w = 22, h = 26, x = Math.round(cx - w / 2), Tw = tones(wall), Tt = tones(trim);
     if (shutters) {
-      R(c, shade(wall, -0.3), x - 7, y + 1, 5, h - 2);
-      R(c, shade(wall, -0.3), x + w + 2, y + 1, 5, h - 2);
-      for (let i = 4; i < h - 2; i += 4) {
-        R(c, shade(wall, -0.45), x - 7, y + i, 5, 1);
-        R(c, shade(wall, -0.45), x + w + 2, y + i, 5, 1);
+      [x - 7, x + w + 2].forEach((sx) => pix(c, sx, y + 1, 5, h - 2, (px, py) => {
+        const ly = py - (y + 1), lx = px - sx;
+        if (lx === 0 || lx === 4 || ly === 0 || ly === h - 3) return Tw[1];
+        return Tw[ly % 3 === 0 ? 1 : ly % 3 === 1 ? 4 : 2];
+      }));
+    }
+    // frame with depth: lit top/left, shaded bottom/right
+    pix(c, x - 2, y - 3, w + 4, h + 5, (px, py) => {
+      const lx = px - (x - 2), ly = py - (y - 3);
+      if (lx === 0 || ly === 0) return Tt[5];
+      if (lx === w + 3 || ly === h + 4) return Tt[1];
+      return Tt[3];
+    });
+    // glass: sky reflection, diagonal glints, curtains at the sides, dark room toward the bottom
+    const sky0 = hexA("#d6eef8"), sky1 = hexA("#6fa6c8"), room = hexA("#2c3a46"), cur = mixA(hexA(trim), [196, 80, 70], 0.55);
+    pix(c, x, y, w, h, (px, py) => {
+      const lx = px - x, ly = py - y;
+      if (lx === Math.floor(w / 2) - 1 || lx === Math.floor(w / 2) || ly === Math.floor(h / 2) - 1 || ly === Math.floor(h / 2)) return lx === Math.floor(w / 2) - 1 || ly === Math.floor(h / 2) - 1 ? Tt[4] : Tt[2];   // muntins
+      if (lx === 0 || ly === 0) return Tt[1];                                                                    // inner shadow
+      const cw = 3 + (ly > h / 2 ? 1 : 0);
+      if (lx <= cw || lx >= w - 1 - cw) return mixA(cur, [0, 0, 0], (lx <= cw ? cw - lx : lx - (w - 1 - cw)) * 0.08 + (ly % 4 === 0 ? 0.12 : 0));
+      const t = ly / h;
+      let col = mixA(sky0, sky1, t * 1.1);
+      if (t > 0.55) col = mixA(col, room, (t - 0.55) * 1.6);
+      const g = (lx + ly) % 11;
+      if (g === 0 || (g === 1 && ly < h / 2)) col = mixA(col, [255, 255, 255], 0.55);
+      return col;
+    });
+    // sill with a shadow under it
+    pix(c, x - 4, y + h + 2, w + 8, 3, (px, py) => Tt[py === y + h + 2 ? 5 : py === y + h + 3 ? 3 : 1]);
+    R(c, "rgba(0,0,0,0.22)", x - 3, y + h + 5, w + 6, 2);
+    if (season === "Winter") { R(c, "#f2f7fb", x - 4, y + h, w + 8, 3); R(c, "#d6e3ee", x - 4, y + h + 2, w + 8, 1); }
+    if (season === "Spring" || season === "Summer") {
+      // flower box with leaves and blooms
+      const B = tones("#6a4428");
+      pix(c, x - 2, y + h + 6, w + 4, 5, (px, py) => B[py === y + h + 6 ? 4 : py === y + h + 10 ? 1 : (px % 6 === 0 ? 2 : 3)]);
+      const flow = ["#e85d75", "#f2c94c", "#ffffff", "#c04bd9", "#ff8a5c"];
+      for (let i = 0; i < 7; i++) {
+        const fx = x - 1 + i * 3 + (i % 2), fy = y + h + 3 + (i % 2);
+        R(c, "#3f7a35", fx, fy + 1, 2, 3); R(c, "#5fa04a", fx - 1, fy + 2, 1, 1);
+        if (i % 2 === 0 || hh(i, x, 425) > 0.4) { R(c, flow[(i + Math.floor(x / 10)) % 5], fx, fy, 2, 2); R(c, "#fff6c8", fx, fy, 1, 1); }
       }
     }
-    R(c, trim, x - 2, y - 3, w + 4, h + 5);
-    R(c, "#33424d", x, y, w, h);
-    R(c, "#9fcbe0", x + 1, y + 1, w - 2, h - 2);
-    R(c, "#cfe9f5", x + 1, y + 1, w - 2, 7);
-    R(c, trim, x + w / 2 - 1, y, 2, h);
-    R(c, trim, x, y + h / 2 - 1, w, 2);
-    R(c, "#ffffff", x + 3, y + 3, 3, 2);
-    R(c, shade(trim, -0.25), x - 4, y + h + 2, w + 8, 3);
-    if (season === "Winter") R(c, "#f2f7fb", x - 4, y + h - 1, w + 8, 3);
-    if (season === "Spring" || season === "Summer") {
-      // flower box
-      R(c, "#5a3a22", x - 2, y + h + 5, w + 4, 4);
-      for (let i = 0; i < 5; i++) R(c, ["#e85d75", "#f2c94c", "#ffffff", "#c04bd9", "#e85d75"][i], x + i * 5, y + h + 3, 3, 3);
-    }
   }
 
-  function drawDoor(c, cx, bottom, doorH, trim) {
-    const w = 38, x = Math.round(cx - w / 2), y = bottom - doorH;
-    R(c, shade(trim, -0.15), x - 5, y - 5, w + 10, doorH + 5);
-    R(c, trim, x - 4, y - 4, w + 8, 3);
-    R(c, "#4e3220", x, y, w, doorH);
-    R(c, "#6b4630", x + 2, y + 2, w - 4, doorH - 2);
-    R(c, "#9fcbe0", x + 5, y + 5, 12, 14);
-    R(c, "#9fcbe0", x + 21, y + 5, 12, 14);
-    R(c, "#4e3220", x + 18, y + 4, 2, 16);
-    R(c, shade("#6b4630", -0.25), x + 5, y + 24, 12, doorH - 28);
-    R(c, shade("#6b4630", -0.25), x + 21, y + 24, 12, doorH - 28);
-    R(c, "#e0b64a", x + 17, y + doorH / 2 + 4, 4, 4);
-    R(c, "#8d8478", x - 7, bottom - 3, w + 14, 5);
-    R(c, "#a79e90", x - 7, bottom - 3, w + 14, 1);
+  function doorRich(c, cx, bottom, doorH, trim) {
+    const w = 38, x = Math.round(cx - w / 2), y = bottom - doorH, Tt = tones(trim), Tw = tones("#6b4630");
+    pix(c, x - 5, y - 5, w + 10, doorH + 5, (px, py) => {
+      const lx = px - (x - 5), ly = py - (y - 5);
+      if (ly < 3) return Tt[ly === 0 ? 5 : 4];
+      if (lx === 0 || lx === 1) return Tt[4];
+      if (lx >= w + 8) return Tt[1];
+      if (lx < 5 || lx >= w + 5 || ly < 5) return Tt[3];
+      // the door leaf: two raised panels below two glass lights
+      const dx = px - x, dy = py - y;
+      if (dx === 0 || dy === 0) return Tw[0];
+      if (dx === Math.floor(w / 2) - 1 || dx === Math.floor(w / 2)) return dx === Math.floor(w / 2) - 1 ? Tw[1] : Tw[4];
+      const inGlass = dy >= 4 && dy < 20 && ((dx >= 4 && dx < 17) || (dx >= 21 && dx < 34));
+      if (inGlass) { const t = (dy - 4) / 16, g = (dx + dy) % 9 === 0; return g ? [230, 244, 250] : mixA([170, 210, 230], [60, 90, 110], t); }
+      const inPanel = dy >= 24 && dy < doorH - 4 && ((dx >= 4 && dx < 17) || (dx >= 21 && dx < 34));
+      if (inPanel) {
+        const px0 = dx < 19 ? 4 : 21;
+        if (dy === 24 || dx === px0) return Tw[1];
+        if (dy === doorH - 5 || dx === px0 + 12) return Tw[4];
+        return Tw[(dx + dy) % 7 === 0 ? 2 : 3];
+      }
+      return Tw[hh(dx, dy >> 2, 426) > 0.85 ? 2 : 3];
+    });
+    R(c, "#e0b64a", x + 15, y + Math.round(doorH / 2) + 4, 3, 3); R(c, "#fff0a8", x + 15, y + Math.round(doorH / 2) + 4, 1, 1);
+    R(c, "#e0b64a", x + 21, y + Math.round(doorH / 2) + 4, 3, 3); R(c, "#fff0a8", x + 21, y + Math.round(doorH / 2) + 4, 1, 1);
+    // stone step
+    const S = tones("#8d8478");
+    pix(c, x - 7, bottom - 3, w + 14, 5, (px, py) => S[py === bottom - 3 ? 5 : py === bottom + 1 ? 1 : (px % 13 === 0 ? 2 : 3)]);
   }
 
+  function foundationRich(c, w, h) {
+    const S = tones("#756d60");
+    pix(c, 0, h - 8, w, 8, (x, y) => {
+      const ly = y - (h - 8), row = ly < 4 ? 0 : 1, by = ly % 4, off = row ? 6 : 0;
+      const k = Math.floor((x + off) / 12), bx = (x + off) % 12;
+      if (by === 0 && ly === 0) return S[5];
+      if (bx === 0 || (by === 0 && row === 1)) return S[1];
+      const v = hh(k, row, 427);
+      return S[by === 1 ? 4 : by === 3 ? 2 : (v > 0.6 ? 4 : v < 0.25 ? 2 : 3)];
+    });
+  }
+
+  function chimneyRich(c, x, topY, bottomY, season) {
+    const Bk = tones("#7e3f33");
+    pix(c, x, topY, 16, bottomY - topY, (px, py) => {
+      const ly = py - topY, row = Math.floor(ly / 5), by = ly % 5, bx = ((px - x) + (row % 2 ? 4 : 0)) % 8;
+      if (by === 4 || bx === 0) return Bk[1];
+      let t = by === 0 ? 4 : 3;
+      if (hh(Math.floor(((px - x) + (row % 2 ? 4 : 0)) / 8), row, 428) > 0.7) t--;
+      if (px - x >= 12) t--;
+      return Bk[Math.max(0, t)];
+    });
+    const C = tones("#4a4a52");
+    pix(c, x - 2, topY - 3, 20, 4, (px, py) => C[py === topY - 3 ? 5 : py === topY ? 1 : 3]);
+    R(c, "#1b1410", x + 3, topY - 2, 10, 2);
+    if (season === "Winter") { R(c, "#eef5fa", x - 2, topY - 6, 20, 3); R(c, "#d4e2ee", x - 2, topY - 4, 20, 1); }
+  }
+
+  function wallPattern(c, style, x0, y0, w, h, col) { return wallRich(c, style, x0, y0, w, h, col); }
+  function drawWindow(c, cx, y, wall, trim, season, shutters) { return windowRich(c, cx, y, wall, trim, season, shutters); }
+  function drawDoor(c, cx, bottom, doorH, trim) { return doorRich(c, cx, bottom, doorH, trim); }
   function drawAwning(c, cx, y, width, cols) {
     const x = Math.round(cx - width / 2);
     for (let i = 0; i < Math.ceil(width / 8); i++) {
@@ -159,43 +305,8 @@ ACM.ArtBuildings = (function () {
     R(c, "#2a1a0e", cx + bw / 2 - 6, y - 4, 1, 4);
   }
 
-  function drawRoof(c, w, roofH, col, season) {
-    const dark = shade(col, -0.26), light = shade(col, 0.2);
-    const left = (y) => Math.round(18 - 26 * (y / roofH));
-    for (let y = 0; y < roofH; y++) R(c, col, left(y), y, w - 2 * left(y), 1);
-    for (let y = 4, row = 0; y < roofH; y += 5, row++) {
-      const l = left(y);
-      R(c, dark, l, y, w - 2 * l, 1);
-      for (let x = l + (row % 2) * 8; x < w - l; x += 16) R(c, dark, x, y - 4, 1, 4);
-      for (let x = l + (row % 2) * 8 + 2; x < w - l - 4; x += 16) R(c, light, x, y - 3, 6, 1);
-    }
-    R(c, light, 18, 0, w - 36, 3);
-    R(c, shade(col, -0.45), left(roofH - 1), roofH - 3, w - 2 * left(roofH - 1), 3);
-    for (let y = 0; y < roofH; y++) {
-      R(c, "rgba(0,0,0,0.18)", left(y), y, 3, 1);
-      R(c, "rgba(255,255,255,0.10)", w - left(y) - 3, y, 3, 1);
-    }
-    R(c, "rgba(0,0,0,0.30)", -8, roofH, w + 16, 5);
-    if (season === "Winter") {
-      for (let y = 0; y < roofH * 0.5; y++) R(c, "#eef5fa", left(y), y, w - 2 * left(y), 1);
-      for (let x = left(roofH * 0.5); x < w - left(roofH * 0.5); x += 4) {
-        const dh = Math.floor(M.hash(x, roofH, 5) * 8);
-        R(c, "#eef5fa", x, Math.floor(roofH * 0.5), 4, dh);
-      }
-      R(c, "#d4e2ee", 18, 3, w - 36, 2);
-    }
-  }
-
-  function drawChimney(c, x, topY, bottomY, season) {
-    R(c, "#7e3f33", x, topY, 16, bottomY - topY);
-    for (let y = topY + 4; y < bottomY; y += 5) R(c, "#5d2b22", x, y, 16, 1);
-    for (let y = topY, k = 0; y < bottomY; y += 5, k++) R(c, "#5d2b22", x + (k % 2 ? 4 : 10), y, 1, 5);
-    R(c, "#4a4a52", x - 2, topY - 3, 20, 4);
-    R(c, "#1b1410", x + 3, topY - 2, 10, 2);
-    R(c, "rgba(255,255,255,0.12)", x + 12, topY, 4, bottomY - topY);
-    if (season === "Winter") R(c, "#eef5fa", x - 2, topY - 6, 20, 4);
-  }
-
+  function drawRoof(c, w, roofH, col, season) { return roofRich(c, w, roofH, col, season); }
+  function drawChimney(c, x, topY, bottomY, season) { return chimneyRich(c, x, topY, bottomY, season); }
   function windowSlots(w, doorCx, maxN) {
     const n = Math.max(1, Math.floor(w / 56));
     const slots = [];
@@ -220,9 +331,7 @@ ACM.ArtBuildings = (function () {
     R(c, shade(b.wall, -0.32), 0, roofH - 6, 3, h - roofH + 6);
     R(c, shade(b.wall, -0.32), w - 3, roofH - 6, 3, h - roofH + 6);
     // stone foundation
-    R(c, "#756d60", 0, h - 8, w, 8);
-    for (let x = 0; x < w; x += 12) R(c, "#5b554b", x, h - 8, 1, 8);
-    R(c, "#8c8475", 0, h - 8, w, 1);
+    foundationRich(c, w, h);
 
     windowSlots(w, doorCx, b.windows || 4).forEach((cx) => drawWindow(c, cx, roofH + 24, b.wall, trim, season, b.style !== "stone"));
     drawDoor(c, doorCx, h - 6, doorH, trim);
