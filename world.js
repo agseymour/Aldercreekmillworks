@@ -711,11 +711,23 @@ ACM.World = (function () {
   function startChase(tx, ty, onCaught, onSafe) {
     chaser = { x: tx * T + 16, y: ty * T + 16, dir: 1, frame: 0, age: 0, wait: 300, onCaught, onSafe };   // 5 s head start (300 steps)
   }
+  // Cover from the squirrel: inside any building, inside the workshop walls, or right at a building's front door
+  // (so a shop that's closed for the night still counts). The burned-out family house is no shelter, and the
+  // homestead only counts once something has been built on the plot.
+  function inShelter() {
+    if (scene) return true;
+    const tx = Math.floor(player.x / T), ty = Math.floor(player.y / T);
+    const ws = M.workshop;
+    if (tx > ws.x && tx < ws.x + ws.w - 1 && ty >= ws.y + 2 && ty <= ws.y + ws.h - 2) return true;   // inside the walls (unbuilt bays are blocked anyway)
+    const doors = M.buildings.filter((b) => b.doorX != null && b.kind !== "legacy");
+    if (M.home && curState && (curState.homeStage || 0) >= 1) doors.push(M.home);
+    return doors.some((b) => Math.abs(tx - b.doorX) <= 1 && ty >= b.y + b.h - 1 && ty <= b.y + b.h + 1);   // the door and the step in front of it
+  }
   function updateChaser() {
     const c = chaser;
     if (!c) return;
     c.age++;
-    if (scene) { chaser = null; if (c.onSafe) c.onSafe(); return; }        // inside a building you're safe
+    if (inShelter()) { chaser = null; if (c.onSafe) c.onSafe(); return; }  // made it to cover: the squirrel gives up
     if (c.wait > 0) { c.wait--; c.frame += 0.08; return; }                  // it shakes itself and glares for a few seconds first
     c.frame += 0.24;
     const dx = player.x - c.x, dy = player.y - c.y, d = Math.hypot(dx, dy) || 1;
@@ -865,7 +877,10 @@ ACM.World = (function () {
     let nearest = null, minScore = 1e9;
     (scene ? scene.stations : M.stations).forEach((s) => {
       const d = Math.hypot(player.x - s.sx, player.y - s.sy);
-      if (d < STATION_RANGE && d < minScore) { minScore = d; nearest = s; }
+      // measuring spots are optional extras: a door, bench or villager in range takes priority over one
+      // (the hardware crate sits right beside Seymour's door and used to steal the E press)
+      const score = s.measure ? d + 48 : d;
+      if (d < STATION_RANGE && score < minScore) { minScore = score; nearest = s; }
     });
     (scene ? (scene.npc ? [scene.npc] : []) : npcs).forEach((n) => {
       if (n.hidden) return;
@@ -1182,6 +1197,7 @@ ACM.World = (function () {
     spawnBurst,
     startChase,
     isChasing: () => !!chaser,
+    inShelter,
     clearChase: () => { chaser = null; },
     getNpcs: () => npcs,
     enterBuilding,

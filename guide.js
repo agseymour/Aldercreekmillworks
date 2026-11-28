@@ -2,7 +2,7 @@ window.ACM = window.ACM || {};
 
 /**
  * Keeps the player on track without nagging:
- *  - a small "Current mission" card under the clock
+ *  - the current mission on the pause screen (Esc) and in the bar under the map
  *  - a morning bulletin once per game day
  *  - a smartphone with one feature: texts from neighbours about the current mission (at most 2 a day)
  *  - a full-screen button
@@ -16,25 +16,11 @@ ACM.Guide = (function () {
   const hhmm = (m) => { m = Math.round(m); const h = Math.floor(m / 60) % 24, mm = m % 60; return ((h + 11) % 12 + 1) + ":" + String(mm).padStart(2, "0") + (h < 12 ? " AM" : " PM"); };
 
   // ---------------------------------------------------------------- mission card
-  function ensureCard() {
-    let el = document.getElementById("mission-card");
-    if (el) return el;
-    el = document.createElement("div");
-    el.id = "mission-card";
-    el.setAttribute("aria-live", "polite");
-    document.getElementById("viewport-wrap").appendChild(el);
-    el.addEventListener("click", () => { const s = S(); if (!s) return; s.missionMin = !s.missionMin; refresh(); });
-    return el;
-  }
+  // The on-map mission card was removed (the goal already shows in the bar under the map and on the
+  // pause screen). refresh() stays so existing callers keep working; it clears any old card.
   function refresh() {
-    const s = S(); if (!s || !G().mission) return;
-    const el = ensureCard(), ms = G().mission();
-    const cv = document.getElementById("game-canvas"), k = Math.max(0.6, cv.clientWidth / 840);   // keep clear of the clock box, which scales with the canvas
-    el.style.top = Math.round(cv.offsetTop + 78 * k) + "px"; el.style.left = Math.round(cv.offsetLeft + 10 * k) + "px"; el.style.width = Math.round(210 * k) + "px"; el.style.fontSize = Math.max(10, Math.round(11.5 * k)) + "px";
-    if (!ms) { el.classList.add("hidden"); return; }
-    el.classList.remove("hidden");
-    el.classList.toggle("min", !!s.missionMin);
-    el.innerHTML = `<div class="mc-head"><span>★ Current mission</span><span class="mc-tog">${s.missionMin ? "＋" : "－"}</span></div>${s.missionMin ? "" : `<div class="mc-body">${ms.html}</div>`}`;
+    const el = document.getElementById("mission-card");
+    if (el) el.remove();
   }
 
   // ---------------------------------------------------------------- morning bulletin

@@ -370,5 +370,357 @@ ACM.QUESTIONS = [
     ],
     answerIndex: 0,
     explanation: "Reversing wave grain in curly maple tears easily under heavy cuts; light passes with sharp edges shear the fibers cleanly."
+  },
+
+  // --- ADDED: more questions per tier so exams don't repeat (teacher: please review) ---
+  {
+    id: "q_t1_7",
+    tier: 1,
+    category: "Tape Measure Accuracy",
+    prompt: "On an imperial tape measure, what measurement is the mark exactly halfway between 3\" and 3 1/4\"?",
+    options: [
+      "3 1/8\"",
+      "3 1/16\"",
+      "3 3/8\"",
+      "3 1/2\""
+    ],
+    answerIndex: 0,
+    explanation: "Halfway between 2/8 (1/4) and 0/8 is 1/8, so the mark reads 3 1/8\". Count the eighths: 3, 3 1/8, 3 1/4."
+  },
+  {
+    id: "q_t1_8",
+    tier: 1,
+    category: "Visual ID: Fasteners",
+    prompt: "Which nail has a small head you can sink below the surface with a nail set and hide with wood filler?",
+    options: [
+      "Common nail",
+      "Finishing nail",
+      "Roofing nail",
+      "Duplex (double-headed) nail"
+    ],
+    answerIndex: 1,
+    explanation: "Finishing nails have a small, barely-there head. Set it about 1/16\" below the surface and fill the hole for an almost invisible joint."
+  },
+  {
+    id: "q_t1_9",
+    tier: 1,
+    category: "Tools & Layout",
+    prompt: "What is a crosscut handsaw designed to cut?",
+    options: [
+      "Along the grain (ripping)",
+      "Across the grain",
+      "Only plywood",
+      "Tight curves"
+    ],
+    answerIndex: 1,
+    explanation: "Crosscut teeth are sharpened like little knives that sever the wood fibres across the grain. A rip saw's chisel-shaped teeth are for cutting along the grain."
+  },
+  {
+    id: "q_t1_10",
+    tier: 1,
+    category: "Shop Safety",
+    prompt: "Planers, routers and table saws are loud enough to damage hearing over time. What should you do?",
+    options: [
+      "Wear earplugs or earmuffs whenever they're running",
+      "Turn up music to cover the noise",
+      "Only protect your ears if the noise hurts",
+      "Stand behind the machine instead"
+    ],
+    answerIndex: 0,
+    explanation: "Hearing damage is permanent and builds up without pain. Wear hearing protection for loud machines, just like safety glasses."
+  },
+  {
+    id: "q_t2_7",
+    tier: 2,
+    category: "Visual ID: Joinery",
+    prompt: "Why is a plain butt joint (the end of one board glued to the face of another) weak with glue alone?",
+    options: [
+      "End grain soaks up glue and makes a poor gluing surface",
+      "Wood glue doesn't stick to pine",
+      "Butt joints are always cut too tight",
+      "Clamps can't hold a butt joint"
+    ],
+    answerIndex: 0,
+    explanation: "End grain is like a bundle of straws: it wicks glue away from the joint. Butt joints need screws, nails, dowels or biscuits to be strong."
+  },
+  {
+    id: "q_t2_8",
+    tier: 2,
+    category: "Assembly & Gluing",
+    prompt: "When using yellow PVA wood glue, how long should a typical joint stay clamped?",
+    options: [
+      "About 30 seconds",
+      "About 30–60 minutes, then let it cure for 24 hours before putting stress on it",
+      "Until the squeeze-out turns white",
+      "At least a full week"
+    ],
+    answerIndex: 1,
+    explanation: "Most yellow glues set enough to unclamp in 30–60 minutes, but they reach full strength in about 24 hours. Don't load the joint before then."
+  },
+  {
+    id: "q_t2_9",
+    tier: 2,
+    category: "Tools & Layout",
+    prompt: "To make a four-sided picture frame with mitred corners, what angle do you cut on each end of every piece?",
+    options: [
+      "90°",
+      "45°",
+      "22.5°",
+      "60°"
+    ],
+    answerIndex: 1,
+    explanation: "Two 45° cuts meet to make each 90° corner. Four corners × 90° = 360°, a closed frame."
+  },
+  {
+    id: "q_t2_10",
+    tier: 2,
+    category: "Visual ID: Fasteners",
+    prompt: "What does a countersink bit do?",
+    options: [
+      "Drills the pilot hole deeper",
+      "Cuts a cone-shaped recess so a flat-head screw sits flush with the surface",
+      "Removes a broken screw",
+      "Cuts threads into the wood"
+    ],
+    answerIndex: 1,
+    explanation: "A countersink matches the angled underside of a flat-head screw so the head ends up flush, or just below the surface for filling."
+  },
+  {
+    id: "q_t3_7",
+    tier: 3,
+    category: "Milling Sequence",
+    prompt: "You've jointed one face and one edge flat and square. Which machine brings the board to an even thickness?",
+    options: [
+      "The jointer again",
+      "The thickness planer",
+      "The band saw",
+      "A belt sander"
+    ],
+    answerIndex: 1,
+    explanation: "The planer copies the flat face you made on the jointer and cuts the opposite face parallel to it. Then rip to width on the table saw."
+  },
+  {
+    id: "q_t3_8",
+    tier: 3,
+    category: "Table Saw Safety",
+    prompt: "Which of these is most likely to cause kickback on the table saw?",
+    options: [
+      "Feeding the board steadily with a push stick",
+      "The board drifting away from the fence and pinching the back of the blade",
+      "Keeping the blade guard and riving knife on",
+      "Wearing safety glasses"
+    ],
+    answerIndex: 1,
+    explanation: "When wood twists or closes on the back of the blade, the rising teeth can grab it and throw it at you. Keep stock tight to the fence and use the riving knife."
+  },
+  {
+    id: "q_t3_9",
+    tier: 3,
+    category: "Trade Math: Board Feet",
+    prompt: "How many board feet are in a board 2 inches thick × 4 inches wide × 6 feet long?",
+    options: [
+      "2 bd ft",
+      "4 bd ft",
+      "8 bd ft",
+      "48 bd ft"
+    ],
+    answerIndex: 1,
+    explanation: "Board feet = thickness (in) × width (in) × length (ft) ÷ 12. So 2 × 4 × 6 ÷ 12 = 4 board feet."
+  },
+  {
+    id: "q_t3_10",
+    tier: 3,
+    category: "Wood Properties",
+    prompt: "Kiln-dried hardwood for indoor furniture should have a moisture content of about:",
+    options: [
+      "0%",
+      "6–9%",
+      "25–30%",
+      "About 50%"
+    ],
+    answerIndex: 1,
+    explanation: "Indoor furniture should be close to the moisture of the home it lives in, about 6–9%. Much wetter wood shrinks and cracks after it's built."
+  },
+  {
+    id: "q_t4_5",
+    tier: 4,
+    category: "Wood Movement",
+    prompt: "How should a solid-wood tabletop be attached to its frame (apron)?",
+    options: [
+      "Glue it solidly along every edge",
+      "With buttons or Z-clips in slots, so the top can expand and contract",
+      "Screw it down through tight holes every 10 cm",
+      "Nail it with finishing nails"
+    ],
+    answerIndex: 1,
+    explanation: "A solid top moves across its width with the seasons. Fastened solid, it will crack or bow. Buttons and Z-clips hold it flat but let it slide."
+  },
+  {
+    id: "q_t4_6",
+    tier: 4,
+    category: "Visual ID: Joinery",
+    prompt: "A common rule of thumb for how thick to make a tenon is:",
+    options: [
+      "About one-third the thickness of the stock",
+      "The full thickness of the stock",
+      "One-tenth the thickness of the stock",
+      "Twice the thickness of the stock"
+    ],
+    answerIndex: 0,
+    explanation: "One-third leaves strong cheeks on the tenon and strong walls on each side of the mortise."
+  },
+  {
+    id: "q_t4_7",
+    tier: 4,
+    category: "Router Safety",
+    prompt: "Looking down from above, which way should you move a hand-held router around the OUTSIDE edges of a board?",
+    options: [
+      "Clockwise",
+      "Counter-clockwise",
+      "Either way",
+      "Back and forth in short strokes"
+    ],
+    answerIndex: 1,
+    explanation: "A router bit spins clockwise from above. Moving counter-clockwise around the outside feeds the wood into the cutter. Going the other way (climb cutting) lets the router grab and run."
+  },
+  {
+    id: "q_t4_8",
+    tier: 4,
+    category: "Finishing & Tear-Out",
+    prompt: "Why sand through the grits in order (for example 80 → 120 → 180) instead of jumping straight to 180?",
+    options: [
+      "Each grit removes the scratches left by the one before",
+      "Fine paper is too expensive to use first",
+      "Coarse grits make the wood darker",
+      "It doesn't matter what order you use"
+    ],
+    answerIndex: 0,
+    explanation: "Fine paper can't remove deep coarse scratches in a reasonable time. Skipping grits leaves scratches that stain will make stand out."
+  },
+  {
+    id: "q_t4_9",
+    tier: 4,
+    category: "Wood Movement",
+    prompt: "Why is quartersawn lumber more stable than flatsawn lumber?",
+    options: [
+      "It's always cut from older trees",
+      "Its growth rings run roughly at right angles to the face, so it shrinks less in width and resists cupping",
+      "It's kiln-dried twice",
+      "It has no grain"
+    ],
+    answerIndex: 1,
+    explanation: "Wood moves most along the growth rings. In quartersawn boards that movement goes into thickness, not width."
+  },
+  {
+    id: "q_t4_10",
+    tier: 4,
+    category: "Boatbuilding",
+    prompt: "A traditional rule of thumb for steam-bending boat ribs is to steam the wood for about:",
+    options: [
+      "1 minute per inch of thickness",
+      "1 hour per inch of thickness",
+      "1 day per inch of thickness",
+      "As long as you like: time doesn't matter"
+    ],
+    answerIndex: 1,
+    explanation: "About an hour per inch of thickness softens the lignin enough to bend. Straight-grained, air-dried White Oak bends best."
+  },
+  {
+    id: "q_t5_4",
+    tier: 5,
+    category: "Visual ID: Joinery",
+    prompt: "What slope is commonly used for dovetails in hardwood?",
+    options: [
+      "1:2",
+      "1:8",
+      "1:20",
+      "1:1"
+    ],
+    answerIndex: 1,
+    explanation: "About 1:8 is typical for hardwood (1:6 for softwood). Steeper slopes leave weak short grain at the tips; shallower ones lose their locking shape."
+  },
+  {
+    id: "q_t5_5",
+    tier: 5,
+    category: "Finishing & Tear-Out",
+    prompt: "Why brush on a thin washcoat or sanding sealer before staining pine or cherry?",
+    options: [
+      "It makes the stain dry faster",
+      "It evens out how much stain the wood soaks up, reducing blotches",
+      "It replaces the need for a top coat",
+      "It makes the wood harder to dent"
+    ],
+    answerIndex: 1,
+    explanation: "Blotch-prone woods soak up stain unevenly. A thin sealer partly fills the thirsty spots so colour goes on evenly."
+  },
+  {
+    id: "q_t5_6",
+    tier: 5,
+    category: "Finishing & Tear-Out",
+    prompt: "Which finish builds a protective film ON the surface rather than soaking into the wood?",
+    options: [
+      "Polyurethane varnish",
+      "Pure tung oil",
+      "Mineral oil",
+      "Paste of beeswax and oil"
+    ],
+    answerIndex: 0,
+    explanation: "Varnishes like polyurethane cure into a hard surface film. Penetrating oils soak in and harden inside the wood, leaving a more natural feel."
+  },
+  {
+    id: "q_t5_7",
+    tier: 5,
+    category: "Shop Safety",
+    prompt: "Why must rags soaked in linseed oil, tung oil or oil stain be laid flat outdoors to dry, or sealed in a metal can with water?",
+    options: [
+      "They smell bad",
+      "They can heat up and catch fire on their own as the oil cures",
+      "They stain the floor",
+      "Oil evaporates and is wasted"
+    ],
+    answerIndex: 1,
+    explanation: "Drying oils give off heat as they cure. A crumpled pile of rags can trap that heat until it ignites. This has burned down real workshops."
+  },
+  {
+    id: "q_t5_8",
+    tier: 5,
+    category: "Finishing & Tear-Out",
+    prompt: "Why do woodworkers use a card scraper on figured wood like curly maple?",
+    options: [
+      "It removes wood faster than a power planer",
+      "It takes very fine shavings without tearing out the reversing grain",
+      "It doesn't need sharpening",
+      "It adds texture to the surface"
+    ],
+    answerIndex: 1,
+    explanation: "A scraper's tiny burr shaves the surface instead of levering fibres up, so it smooths tricky grain where a plane would tear out."
+  },
+  {
+    id: "q_t5_9",
+    tier: 5,
+    category: "Visual ID: Joinery",
+    prompt: "When hand-sawing dovetails, where should the saw kerf go?",
+    options: [
+      "Right down the middle of the layout line",
+      "On the waste side of the line",
+      "On the keeper side of the line",
+      "It doesn't matter"
+    ],
+    answerIndex: 1,
+    explanation: "Saw on the waste side and leave the line. The joint fits exactly to your layout instead of being a saw-kerf too loose."
+  },
+  {
+    id: "q_t5_10",
+    tier: 5,
+    category: "Wood Movement",
+    prompt: "Breadboard ends on a solid tabletop are usually glued or pinned tightly only at the centre. Why?",
+    options: [
+      "To save glue",
+      "So the panel can expand and contract across its width under the breadboard",
+      "Because the ends are only decorative",
+      "So the breadboard can be removed later"
+    ],
+    answerIndex: 1,
+    explanation: "The panel moves with the seasons but the breadboard doesn't. Fixing only the centre (with elongated pin holes toward the edges) lets the panel slide without cracking."
   }
 ];

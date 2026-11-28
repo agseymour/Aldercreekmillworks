@@ -87,7 +87,7 @@ ACM.Game = (function () {
     sel: 0,
     answeredQuestions: [],
     completedProjectIds: [],
-    timeMin: 360,
+    timeMin: 445,          // a new game starts at 7:25 AM: the walk to Seymour's shop takes ~10 game minutes, and it opens at 7:30
     energy: 150,
     maxEnergy: 150,
     felled: {},
@@ -494,10 +494,25 @@ ACM.Game = (function () {
   // =====================================================================
   //  CLOCK, ENERGY, SLEEP
   // =====================================================================
+  // Events the teacher dashboard and progress report are built from. These are kept much longer than routine
+  // activity (walking into buildings, chatting, felling, eating...), so a semester of play doesn't push early
+  // quiz results and mistake trends out of the record.
+  const LEARNING_EVENTS = new Set(["deliver", "build", "refused", "quiz", "exam", "safety", "measure", "design", "draft", "drop", "hazard", "fasten", "test"]);
+  const KEEP_LEARNING = 3000, KEEP_ROUTINE = 600;
   function logEvent(type, data) {
     if (!state.events) state.events = [];
-    state.events.push(Object.assign({ t: type, d: state.dayCount, m: Math.round(state.timeMin || 0) }, data || {}));
-    if (state.events.length > 600) state.events.splice(0, state.events.length - 600);
+    const ev = state.events;
+    ev.push(Object.assign({ t: type, d: state.dayCount, m: Math.round(state.timeMin || 0) }, data || {}));
+    if (ev.length <= KEEP_ROUTINE) return;
+    let learning = 0;
+    for (let i = 0; i < ev.length; i++) if (LEARNING_EVENTS.has(ev[i].t)) learning++;
+    let dropRoutine = Math.max(0, ev.length - learning - KEEP_ROUTINE), dropLearning = Math.max(0, learning - KEEP_LEARNING);
+    if (!dropRoutine && !dropLearning) return;
+    state.events = ev.filter((e) => {      // drop the oldest of whichever kind is over its limit
+      if (LEARNING_EVENTS.has(e.t)) { if (dropLearning > 0) { dropLearning--; return false; } }
+      else if (dropRoutine > 0) { dropRoutine--; return false; }
+      return true;
+    });
   }
 
   // ----- friendship perks -----
@@ -696,7 +711,8 @@ ACM.Game = (function () {
     if (def.needsLegacy && ACM.Story.stage(ACM.Game) < 5) { toast("The house is not ready yet.", ""); return; }
     if (def.needsStage != null && (state.homeStage || 0) < def.needsStage) { toast("Your homestead isn't ready to walk into yet. Keep building!", ""); return; }
     if (!ACM.World.shopOpen(bid, state.timeMin)) {
-      toast(`${def.name} is closed. It opens ${ACM.ArtWorld.fmtTime(def.open[0])} to ${ACM.ArtWorld.fmtTime(def.open[1])}.`, "bad");
+      const hm = (m) => ACM.ArtWorld.fmtTime(m) + (Math.floor(m / 60) % 24 < 12 ? " AM" : " PM");
+      toast(`${def.name} is closed. Open ${hm(def.open[0])} to ${hm(def.open[1])}.`, "bad");
       if (ACM.Audio) ACM.Audio.sfx("bad");
       return;
     }
@@ -803,8 +819,8 @@ ACM.Game = (function () {
             <p class="item-meta">You hid in the workshop until dark, bruised and out of breath. The day is over. Felling lots of trees in a single day makes it more likely that you'll disturb something living in them.</p>
             <div class="dialog-actions"><button class="btn-wood" data-act="close">OK</button></div>`
         });
-        const safe = () => { logEvent("squirrel_escape", {}); toast("You ducked inside and the squirrel gave up. Phew!", "good"); };
-        if (ACM.World.startChase && tx != null) { toast("RUN for cover (any building)! You have a 5 second head start.", "bad"); ACM.World.startChase(tx, ty, caught, safe); }
+        const safe = () => { logEvent("squirrel_escape", {}); toast("You made it to cover and the squirrel gave up. Phew!", "good"); };
+        if (ACM.World.startChase && tx != null) { toast("RUN for cover: your workshop or any building's door! You have a 5 second head start.", "bad"); ACM.World.startChase(tx, ty, caught, safe); }
         else caught();
       };
     }, 700);
@@ -1136,6 +1152,14 @@ ACM.Game = (function () {
     Object.keys(state.pantry).forEach((id) => foodCount(id) > 0 && ACM.FOODS[id] && out.push([id, foodCount(id)]));
     return out;
   }
+  // Boards the active commission still needs (not yet pulled onto the bench) can't be given away:
+  // returns that commission's title when giving one more of `key` would leave too few, else null.
+  function neededForJob(key) {
+    const job = getActiveProject();
+    if (!job || (state.jobProgress && state.jobProgress.lumberAssigned) || !job.lumberReq.allowedIds.includes(key)) return null;
+    const have = job.lumberReq.allowedIds.reduce((t, lid) => t + (state.lumberStock[lid] || 0), 0);
+    return have - 1 < job.lumberReq.units ? job.title : null;
+  }
   function takeItem(key) {
     if (ACM.FOODS[key]) takeFood(key);
     else if (key.startsWith("log_")) state.logs[key.slice(4)]--;
@@ -1189,8 +1213,15 @@ ACM.Game = (function () {
       <div>${heartsHtml(h)}</div><div class="speech" style="margin-top:6px;">${speech}</div></div></div>`;
     if (view === "gift") {
       const items = giftables();
-      body += `<h3 style="margin-top:10px;">Choose a gift for ${escapeHtml(npc.name)}</h3><div class="dialog-actions">` +
-        (items.length ? items.map(([k, n]) => `<button class="btn-brass btn-sm" data-act="gift" data-npc="${id}" data-item="${k}">${escapeHtml(itemName(k))} ×${n}</button>`).join("") : "<span class='item-meta'>You have nothing to give yet.</span>") +
+      const giftBtn = ([k, n]) => {
+        const need = neededForJob(k);
+        return need
+          ? `<button class="btn-wood btn-sm" disabled title="You need these boards for the ${escapeHtml(need)}">${escapeHtml(itemName(k))} ×${n} (needed for your ${escapeHtml(need)})</button>`
+          : `<button class="btn-wood btn-sm" data-act="gift" data-npc="${id}" data-item="${k}">${escapeHtml(itemName(k))} ×${n}</button>`;
+      };
+      body += `<h3 style="margin-top:10px;">Choose a gift for ${escapeHtml(npc.name)}</h3><div class="dialog-actions" style="flex-wrap:wrap;">` +
+        (r.giftDay === state.dayCount ? "<span class='item-meta'>You've already given a gift today. Come back tomorrow.</span>"
+          : items.length ? items.map(giftBtn).join("") : "<span class='item-meta'>You have nothing to give yet.</span>") +
         `</div><div class="dialog-actions"><button class="btn-wood btn-sm" data-act="npc" data-npc="${id}" data-view="">Back</button></div>`;
     } else if (view === "jobs") {
       const jobs = npcJobs(npc);
@@ -1203,8 +1234,8 @@ ACM.Game = (function () {
       const ho = handOverButtons(id);
       if (ho) body += `<div class="dialog-actions" style="flex-wrap:wrap;">${ho}</div>`;
       body += `<div class="dialog-actions">
-        <button class="btn-green btn-sm" data-act="chat" data-npc="${id}">${r.talkDay === state.dayCount ? "Chat again" : "Chat (+friendship)"}</button>
-        <button class="btn-brass btn-sm" data-act="npc" data-npc="${id}" data-view="gift">Give a gift</button>
+        <button class="btn-green btn-sm" data-act="chat" data-npc="${id}"${ho ? "" : " data-space"}>${r.talkDay === state.dayCount ? "Chat again" : "Chat (+friendship)"}</button>
+        <button class="btn-wood btn-sm" data-act="npc" data-npc="${id}" data-view="gift">Give a gift</button>
         ${jobs.length ? `<button class="btn-brass btn-sm" data-act="npc" data-npc="${id}" data-view="jobs">Commissions (${jobs.length})</button>` : ""}
         ${id === "clara" ? `<button class="btn-brass btn-sm" data-act="provisions">Pantry food that keeps</button>` : ""}
         ${meal ? `<button class="btn-green btn-sm" data-act="meal" data-npc="${id}">${meal.name} ($${meal.cost}, +${meal.energy}⚡)</button>` : ""}
@@ -1237,6 +1268,7 @@ ACM.Game = (function () {
     } else if (act === "gift") {
       const npc = npcById(id), r = relOf(id), key = el.dataset.item;
       if (r.giftDay === state.dayCount) { openNpcDialog(id, "You've already been generous today. Thank you!", ""); return; }
+      if (neededForJob(key)) { openNpcDialog(id, "Keep those boards for your commission! I'll be fine.", ""); return; }
       takeItem(key);
       r.giftDay = state.dayCount;
       const lvl = ACM.NPC_HELPERS.likeLevel(npc, key);
@@ -1267,7 +1299,7 @@ ACM.Game = (function () {
   // =====================================================================
   const TUT = [
     { id: "meet_seymour", npc: "seymour", text: "Meet <strong>Seymour</strong>: walk up to the Hardware Shop door (it is open 7:30 AM to 6 PM) and press E to go inside. Then talk to him." },
-    { id: "first_delivery", text: "Build your first commission: <strong>Blueprint Desk → Layout Bench → Assembly Table</strong> in your workshop, then take the finished piece to the person who asked for it and hand it over for cash and ★." },
+    { id: "first_delivery", text: "Build your first commission in your workshop: <strong>Layout Bench → Assembly Table</strong>. Then take the finished piece to the person who asked for it and hand it over for cash and ★. (The Blueprint Desk is for trade questions that earn extra cash.)" },
     { id: "fell", text: "<strong>Equip your felling axe</strong> (select it in the hotbar), then click a tree again and again (it takes several chops) to <strong>fell</strong> it. Mind your energy (⚡ bar, bottom right)." },
     { id: "rack", text: "Sell or mill a log at the <strong>Lumber Rack</strong> beside your workshop." },
     { id: "plant", text: "<strong>Plant a sapling</strong>: pick one in the green bar, then click open grass." },
@@ -1537,7 +1569,9 @@ ACM.Game = (function () {
 
   /** Esc: the whole game stops (clock, energy, the squirrel, walking) while this window is open. */
   function openPause() {
+    const ms = mission();
     openModal("⏸ Paused", `<p class="item-meta">The game is paused. Time, energy and everything else stand still until you resume.</p>
+      <div class="tut-box" style="margin:8px 0;"><strong>★ Current mission</strong><div style="margin-top:4px;">${ms ? ms.html : "Look around the village, take on a commission at the Town Hall board, or visit your neighbours."}</div></div>
       <div class="dialog-actions" style="flex-wrap:wrap;gap:6px">
         <button class="btn-brass" id="ps-resume" data-space>Resume</button>
         <button class="btn-wood btn-sm" id="ps-phone">📱 Phone</button>
@@ -2031,6 +2065,27 @@ ACM.Game = (function () {
     return required.filter(([key]) => !ACM[key]).map(([, file]) => file);
   }
 
+  // ---- autosave: progress survives a closed tab, a dead battery or a crashed browser ----
+  // On this device every 30 s and whenever the tab is hidden or closed (instant, works offline);
+  // to the cloud every 3 minutes and when the tab is hidden, but only if something changed.
+  let autosaveOn = false, lastCloudSig = "";
+  const saveSig = () => [state.dayCount, Math.floor(state.timeMin), Math.round(state.cash), state.stars, (state.events || []).length, state.energy].join("|");
+  function cloudAutosave() {
+    const sig = saveSig();
+    if (sig === lastCloudSig) return;
+    lastCloudSig = sig;
+    ACM.CloudSync.saveToCloud(state).catch(() => {});
+  }
+  function startAutosave() {
+    if (autosaveOn) return;
+    autosaveOn = true;
+    lastCloudSig = saveSig();
+    setInterval(() => ACM.CloudSync.saveLocal(state), 30000);
+    setInterval(cloudAutosave, 180000);
+    document.addEventListener("visibilitychange", () => { if (document.hidden) { ACM.CloudSync.saveLocal(state); cloudAutosave(); } });
+    window.addEventListener("pagehide", () => ACM.CloudSync.saveLocal(state));
+  }
+
   function initCharacterCreator() {
     const statusEl = document.getElementById("login-status");
     const startBtn = document.getElementById("btn-start-new");
@@ -2086,6 +2141,7 @@ ACM.Game = (function () {
           if (result && result.state) {
             migrateLoadedState(result.state);
             toast(`Welcome back to ${state.shopName}!`, "good");
+            if (result.newerLocal) ACM.CloudSync.saveToCloud(state);   // this device had progress the cloud never got: send it up
           } else {
             if (pinHash) { Mem.forgetPin(classCode, shopName); renderRecents(); fail("Please type your PIN to sign in again.", "input-pin"); return; }
             if (!/^\d{4}$/.test(pin)) { fail("New workshop: choose a PIN of exactly 4 numbers, and remember it.", "input-pin"); return; }
@@ -2094,7 +2150,7 @@ ACM.Game = (function () {
             state.pin = pin;
             isNew = true;
             await ACM.CloudSync.saveToCloud(state);
-            toast(`Welcome to Alder Creek! Your first commission (Classic Songbird House) is ready at the Layout Bench.`, "good");
+            toast(`Welcome to Alder Creek! First, go and meet Seymour at the Hardware Shop. Your first commission (Classic Songbird House) is waiting in your workshop.`, "good");
           }
         }
       } catch (err) {
@@ -2111,6 +2167,7 @@ ACM.Game = (function () {
         });
       }
       $in("input-pin").value = "";
+      startAutosave();
       document.getElementById("creator-modal").classList.add("hidden");
       updateHUD();
       renderPlantBar();
