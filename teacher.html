@@ -86,31 +86,36 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  // Saves are written by student browsers, so nothing in them can be trusted to be the type it should be.
+  // Every number read from a save goes through num(); text goes through esc() when rendered.
+  const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+  const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
   const PERMITS = (window.ACM && ACM.SAFETY) || [];
   const MEASURE_TOTAL = 32, STORY_TOTAL = 5;
   let CLASS = "", students = [], sortKey = "name", sortAsc = true, selected = null, mode = "";
 
   // ---------- turn one saved game into the numbers a teacher cares about ----------
   function analyse(s) {
-    const ev = Array.isArray(s.events) ? s.events : [];
+    const ev = (Array.isArray(s.events) ? s.events : []).filter((e) => e && typeof e === "object");
     const dels = ev.filter((e) => e.t === "deliver");
     const quizzes = ev.filter((e) => e.t === "quiz");
     const exams = ev.filter((e) => e.t === "exam");
     const meas = ev.filter((e) => e.t === "measure");
     const hazards = ev.filter((e) => e.t === "hazard");
     const q = { Excellent: 0, Good: 0, Fair: 0, Rough: 0 };
-    dels.forEach((d) => { q[d.quality] = (q[d.quality] || 0) + 1; });
+    dels.forEach((d) => { if (own(q, d.quality)) q[d.quality]++; });
     const half = Math.floor(dels.length / 2);
-    const avg = (a) => (a.length ? a.reduce((x, d) => x + (d.mistakes || 0), 0) / a.length : null);
+    const avg = (a) => (a.length ? a.reduce((x, d) => x + num(d.mistakes), 0) / a.length : null);
     const early = avg(dels.slice(0, Math.max(1, half))), late = dels.length >= 3 ? avg(dels.slice(half)) : null;
-    const cats = {};
-    quizzes.forEach((x) => { const c = cats[x.cat] || (cats[x.cat] = { ok: 0, n: 0 }); c.n++; if (x.ok) c.ok++; });
-    const safety = s.safety || {};
-    const permits = PERMITS.map((p) => { const r = safety[p.id] || {}; return { id: p.id, name: p.name, icon: p.icon, att: r.att || 0, best: r.best || 0, passed: !!r.passed }; });
+    const cats = Object.create(null);   // no prototype, so a category named "__proto__" is just a category
+    quizzes.forEach((x) => { const k = String(x.cat); const c = cats[k] || (cats[k] = { ok: 0, n: 0 }); c.n++; if (x.ok) c.ok++; });
+    const safety = s.safety && typeof s.safety === "object" ? s.safety : {};
+    const permits = PERMITS.map((p) => { const r = safety[p.id] || {}; return { id: p.id, name: p.name, icon: p.icon, att: num(r.att), best: num(r.best), passed: !!r.passed }; });
     const noPermit = hazards.filter((h) => h.type === "no_permit");
     const quizOk = quizzes.filter((x) => x.ok).length;
     const measureFound = Object.keys(s.measured || {}).length;
     const builds = ev.filter((e) => e.t === "build");
+    const drops = ev.filter((e) => e.t === "drop" && e.started);
     const repairIds = Object.keys((window.ACM && ACM.REPAIRS) || {});
     const done = Array.isArray(s.completedProjectIds) ? s.completedProjectIds : [];
     const repairs = repairIds.filter((id) => done.includes(id));
@@ -118,27 +123,27 @@
     const bays = (ws.west ? 1 : 0) + (ws.east ? 1 : 0);
     const pending = Array.isArray(s.products) ? s.products.length : 0;
     const safetyEv = ev.filter((e) => e.t === "safety");
-    const lastSafety = {};
+    const lastSafety = Object.create(null);
     safetyEv.forEach((e) => { lastSafety[e.id] = e; });
     const perDay = {};
-    ev.forEach((e) => { perDay[e.d] = (perDay[e.d] || 0) + 1; });
+    ev.forEach((e) => { const d = num(e.d); perDay[d] = (perDay[d] || 0) + 1; });
     const dl = (s.drafting && s.drafting.lessons) || {};
     const lessonsDone = Object.values(dl).filter((x) => x && x.done).length;
-    const lessonTries = Object.values(dl).reduce((x, r) => x + ((r && r.att) || 0), 0);
+    const lessonTries = Object.values(dl).reduce((x, r) => x + num(r && r.att), 0);
     const designEv = ev.filter((e) => e.t === "design");
-    const planAcc = designEv.length ? designEv.reduce((x, e) => x + (e.total ? e.ok / e.total : 0), 0) / designEv.length : null;
+    const planAcc = designEv.length ? designEv.reduce((x, e) => x + (num(e.total) ? num(e.ok) / num(e.total) : 0), 0) / designEv.length : null;
     const a = {
       lessonsDone, lessonTries, designs: designEv.length, planAcc,
       testMode: !!s.testMode || ev.some((e) => e.t === "test"),
       builds: builds.length, pending, repairs, repairTotal: repairIds.length, bays, safetyEv, lastSafety, quizEv: quizzes, perDay,
-      name: s.shopName || "?", days: s.dayCount || 0, stars: Number(s.stars) || 0, cash: Math.round(s.cash || 0), tier: s.certifiedTier || 1,
+      name: String(s.shopName || "?"), days: num(s.dayCount), stars: num(s.stars), cash: Math.round(num(s.cash)), tier: num(s.certifiedTier) || 1,
       delivered: dels.length, q, early, late, dels,
       quizN: quizzes.length, quizOk, quizPct: quizzes.length ? quizOk / quizzes.length : null, cats,
       examsTaken: exams.length, examsPassed: exams.filter((e) => e.pass).length,
       permits, permitsPassed: permits.filter((p) => p.passed).length, permitAttempts: permits.reduce((x, p) => x + p.att, 0),
       measureOk: meas.filter((m) => m.ok).length, measureTries: meas.length, measureFound,
-      story: (s.story && s.story.stage) || 0, noPermit: noPermit.length, hazards: hazards.length,
-      felled: (s.stats && s.stats.felled) || 0, planted: (s.stats && s.stats.planted) || 0, refused: (s.stats && s.stats.refused) || 0,
+      story: num(s.story && s.story.stage), noPermit: noPermit.length, hazards: hazards.length,
+      felled: num(s.stats && s.stats.felled), planted: num(s.stats && s.stats.planted), refused: num(s.stats && s.stats.refused), dropped: drops.length, droppedMistakes: drops.reduce((x, e) => x + num(e.mistakes), 0),
       raw: ev, updated: s._updated || null, eventCount: ev.length
     };
     a.flags = flagsFor(a);
@@ -152,14 +157,16 @@
     if (a.late != null && a.early != null && a.late > a.early + 0.5) f.push("Mistakes rising");
     if (a.pending >= 2) f.push(a.pending + " projects waiting to be handed over");
     if (a.days >= 4 && a.delivered === 0) f.push("No finished work yet");
-    PERMITS.forEach(() => {});
     const stuck = a.permits.filter((p) => p.att >= 4 && !p.passed);
     if (stuck.length) f.push("Stuck on " + stuck.map((p) => p.name).join(", "));
     if (a.testMode) f.push("Used the teacher test panel (test account)");
     if (a.examsTaken >= 3 && a.examsPassed === 0) f.push("Failing certification exams");
+    if (a.dropped >= 3) f.push("Often abandons builds part-way");
     return f;
   }
 
+  // A cell that starts with = + - @ (or a tab/CR) runs as a formula in Excel/Sheets; prefix it so it stays text.
+  const csvCell = (c) => { let t = String(c == null ? "" : c); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return `"${t.replace(/"/g, '""')}"`; };
   const pct = (x) => (x == null ? "—" : Math.round(x * 100) + "%");
   const f1 = (x) => (x == null ? "—" : x.toFixed(1));
   function ago(iso) {
@@ -234,14 +241,14 @@
     const sm = {};
     students.forEach((s) => s.safetyEv.forEach((e) => {
       const g = (PERMITS.find((p) => p.id === e.id) || { q: [] }).q;
-      const missed = e.missed || [];
+      const missed = Array.isArray(e.missed) ? e.missed.map(num) : [];
       g.forEach((q, i) => {
         if (q[2]) return; // unconfirmed answer: not graded, so not counted
         const k = e.id + "#" + i, r = sm[k] || (sm[k] = { n: 0, miss: 0, who: new Set() });
         r.n++; if (missed.includes(i)) { r.miss++; r.who.add(s.name); }
       });
     }));
-    const qm = {}, qText = {};
+    const qm = Object.create(null), qText = {};
     ((window.ACM && ACM.QUESTIONS) || []).forEach((q) => { qText[q.id] = `[T${q.tier} · ${q.category}] ${q.prompt}`; });
     students.forEach((s) => s.quizEv.forEach((e) => { const r = qm[e.q] || (qm[e.q] = { n: 0, miss: 0, who: new Set() }); r.n++; if (!e.ok) { r.miss++; r.who.add(s.name); } }));
     const days = {}; students.forEach((s) => Object.entries(s.perDay).forEach(([d, c]) => { days[d] = (days[d] || 0) + c; }));
@@ -263,9 +270,9 @@
   }
 
   function lastMiss(s) {
-    const out = Object.values(s.lastSafety).filter((e) => !e.ok && (e.missed || []).length).map((e) => {
+    const out = Object.values(s.lastSafety).filter((e) => !e.ok && Array.isArray(e.missed) && e.missed.length).map((e) => {
       const p = PERMITS.find((x) => x.id === e.id); if (!p) return "";
-      return `<div class="note" style="margin-top:6px"><strong>${esc(p.name)}</strong> last attempt (${e.pct}%), missed:<br>${e.missed.map((i) => "• " + esc((p.q[i] || [""])[0])).join("<br>")}</div>`;
+      return `<div class="note" style="margin-top:6px"><strong>${esc(p.name)}</strong> last attempt (${num(e.pct)}%), missed:<br>${e.missed.map((i) => "• " + esc((p.q[num(i)] || [""])[0])).join("<br>")}</div>`;
     }).join("");
     return out ? `<div style="margin-top:8px"><strong>Still to review</strong>${out}</div>` : "";
   }
@@ -275,9 +282,10 @@
     const catRows = Object.entries(s.cats).sort((a, b) => a[1].ok / a[1].n - b[1].ok / b[1].n).map(([c, v]) => `<div class="row"><span>${esc(c)}</span><span class="${v.ok / v.n < 0.6 ? "bad" : ""}">${v.ok}/${v.n} · ${pct(v.ok / v.n)}</span></div>`).join("") || '<span class="note">No quiz answers yet.</span>';
     const permRows = s.permits.map((p) => `<div class="row"><span>${p.icon || ""} ${esc(p.name)}</span><span class="${p.passed ? "good" : p.att ? "warn" : "note"}">${p.passed ? "✓ passed" : p.att ? "not yet" : "not tried"} · ${p.att} attempt${p.att === 1 ? "" : "s"}${p.best ? " · best " + p.best : ""}</span></div>`).join("");
     $("detail").innerHTML = `
-      <div class="card"><h3>${esc(s.name)} — work quality</h3>${spark(s.dels.map((d) => d.mistakes || 0))}
+      <div class="card"><h3>${esc(s.name)} — work quality</h3>${spark(s.dels.map((d) => num(d.mistakes)))}
         <div class="row" style="margin-top:8px"><span>Excellent / Good / Fair / Rough</span><span>${s.q.Excellent} / ${s.q.Good} / ${s.q.Fair} / ${s.q.Rough}</span></div>
         <div class="row"><span>Commissions sent back to remake</span><span>${s.refused}</span></div>
+        <div class="row"><span>Abandoned mid-build</span><span class="${s.dropped >= 3 ? "warn" : ""}">${s.dropped}${s.dropped ? ` (${s.droppedMistakes} mistake${s.droppedMistakes === 1 ? "" : "s"} on those attempts)` : ""}</span></div>
         <div class="row"><span>Machine use without a permit</span><span class="${s.noPermit ? "bad" : ""}">${s.noPermit}</span></div>
         <div class="row"><span>Certification exams passed</span><span>${s.examsPassed}/${s.examsTaken}</span></div></div>
       <div class="card"><h3>Quiz accuracy by topic (weakest first)</h3>${catRows}</div>
@@ -298,23 +306,23 @@
   async function load() {
     $("src").textContent = "Loading…";
     const res = await ACM.CloudSync.fetchClassSaves(CLASS);
-    students = res.saves.map(analyse);
+    students = res.saves.map((sv) => { try { return analyse(sv); } catch (e) { console.warn("Skipped an unreadable save", e); return null; } }).filter(Boolean);
     mode = res.mode;
     $("src").textContent = (res.mode === "cloud" ? "Live from the class cloud" : "From saves on THIS device only") + (res.warning ? ` (${res.warning})` : "") + " · " + new Date().toLocaleTimeString();
     render();
   }
 
   function csv() {
-    const head = ["student", "last_saved", "days", "stars", "tier", "delivered", "excellent", "good", "fair", "rough", "mistakes_early", "mistakes_recent", "quiz_answered", "quiz_correct", "permits_passed", "permit_attempts", "measure_ok", "measure_tries", "story_stage", "no_permit_events", "built", "pending_handover", "repairs", "bays", "draft_lessons", "designs", "plan_accuracy", "flags"];
-    const rows = students.map((s) => [s.name, s.updated || "", s.days, s.stars.toFixed(2), s.tier, s.delivered, s.q.Excellent, s.q.Good, s.q.Fair, s.q.Rough, s.early == null ? "" : s.early.toFixed(2), s.late == null ? "" : s.late.toFixed(2), s.quizN, s.quizOk, s.permitsPassed, s.permitAttempts, s.measureOk, s.measureTries, s.story, s.noPermit, s.builds, s.pending, s.repairs.length, s.bays, s.lessonsDone, s.designs, s.planAcc == null ? "" : s.planAcc.toFixed(2), s.flags.join("; ")]);
-    const text = [head, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const head = ["student", "last_saved", "days", "stars", "tier", "delivered", "excellent", "good", "fair", "rough", "mistakes_early", "mistakes_recent", "quiz_answered", "quiz_correct", "permits_passed", "permit_attempts", "measure_ok", "measure_tries", "story_stage", "no_permit_events", "dropped_mid_build", "built", "pending_handover", "repairs", "bays", "draft_lessons", "designs", "plan_accuracy", "flags"];
+    const rows = students.map((s) => [s.name, s.updated || "", s.days, s.stars.toFixed(2), s.tier, s.delivered, s.q.Excellent, s.q.Good, s.q.Fair, s.q.Rough, s.early == null ? "" : s.early.toFixed(2), s.late == null ? "" : s.late.toFixed(2), s.quizN, s.quizOk, s.permitsPassed, s.permitAttempts, s.measureOk, s.measureTries, s.story, s.noPermit, s.dropped, s.builds, s.pending, s.repairs.length, s.bays, s.lessonsDone, s.designs, s.planAcc == null ? "" : s.planAcc.toFixed(2), s.flags.join("; ")]);
+    const text = [head, ...rows].map((r) => r.map(csvCell).join(",")).join("\n");
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" })); a.download = `${CLASS}_class_report.csv`; a.click();
   }
 
   function eventsCsv() {
     const rows = [];
     students.forEach((s) => (s.raw || []).forEach((e) => { const { t, d, m, ...rest } = e; rows.push([s.name, d, m, t, JSON.stringify(rest)]); }));
-    const text = [["student", "game_day", "minute", "event", "details_json"], ...rows].map((r) => r.map((c) => `"${String(c == null ? "" : c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const text = [["student", "game_day", "minute", "event", "details_json"], ...rows].map((r) => r.map(csvCell).join(",")).join("\n");
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" })); a.download = `${CLASS}_events.csv`; a.click();
   }
 
@@ -341,7 +349,6 @@
     const th = e.target.closest("th"); if (th) { const k = th.dataset.k; if (k === sortKey) sortAsc = !sortAsc; else { sortKey = k; sortAsc = k === "name"; } render(); return; }
     const tr = e.target.closest("tbody tr"); if (tr && tr.dataset.n) { selected = tr.dataset.n; render(); }
   });
-  $("mode").textContent = ACM.CloudSync && /disabled/.test("") ? "" : "";
   window._dash = { analyse };
 })();
 </script>

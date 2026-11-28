@@ -212,17 +212,6 @@ ACM.Game = (function () {
     return (ACM.PROJECTS || []).find((p) => p.id === state.activeProjectId) || null;
   }
 
-  // If a player drops a half-finished commission, give back the lumber that was already pulled from the rack.
-  function refundAssignedLumber() {
-    const job = getActiveProject();
-    const prog = state.jobProgress;
-    if (job && prog && prog.lumberAssigned) {
-      state.lumberStock[prog.lumberAssigned] = (state.lumberStock[prog.lumberAssigned] || 0) + job.lumberReq.units;
-      return true;
-    }
-    return false;
-  }
-
   function resetJobProgress() {
     state.jobProgress = {
       lumberAssigned: null,
@@ -1031,15 +1020,40 @@ ACM.Game = (function () {
     return true;
   }
 
+  function progressOf(pid) { return pid === state.activeProjectId ? state.jobProgress : state.jobStash[pid]; }
+  // Once a board has been marked, cut or milled (or a mistake made), the work has started and the wood is spent.
+  // Otherwise dropping and re-accepting would wipe the mistake count for free, dodging a refused delivery.
+  function buildStarted(prog) {
+    return !!(prog && prog.lumberAssigned && (prog.cutIndex > 0 || prog.mistakes > 0 || (prog.completedTools || []).length));
+  }
+
   function dropJob(pid) {
     const job = projectById(pid);
-    const prog = pid === state.activeProjectId ? state.jobProgress : state.jobStash[pid];
-    if (job && prog && prog.lumberAssigned) state.lumberStock[prog.lumberAssigned] = (state.lumberStock[prog.lumberAssigned] || 0) + job.lumberReq.units;
+    const prog = progressOf(pid);
+    const started = buildStarted(prog);
+    let refunded = false;
+    if (job && prog && prog.lumberAssigned && !started) {
+      state.lumberStock[prog.lumberAssigned] = (state.lumberStock[prog.lumberAssigned] || 0) + job.lumberReq.units;
+      refunded = true;
+    }
     state.accepted = state.accepted.filter((x) => x !== pid);
     delete state.jobStash[pid];
     if (pid === state.activeProjectId) { state.activeProjectId = null; switchActive(state.accepted[0] || null); }
-    logEvent("drop", { pid });
+    if (started) state.stats.dropped = (state.stats.dropped || 0) + 1;
+    logEvent("drop", { pid, started, mistakes: (prog && prog.mistakes) || 0, cuts: (prog && prog.cutIndex) || 0, refunded });
     updateHUD();
+    if (started) toast("Commission dropped. The cut pieces went in the offcut bin.", "bad");
+    else if (refunded) toast("Commission dropped. The uncut boards went back on your rack.", "good");
+  }
+
+  function askDropJob(pid) {
+    const job = projectById(pid);
+    if (!job) return;
+    if (!buildStarted(progressOf(pid))) { dropJob(pid); updateObjective(); openTownBoard(); return; }
+    const prog = progressOf(pid);
+    openModal("Drop this commission?", `<p>You've already started on the <strong>${escapeHtml(job.title)}</strong>. The boards are marked and cut, so <strong>the wood can't go back on the rack</strong>.</p>
+      <p class="item-meta">Mistakes so far: ${prog.mistakes || 0}. If it's going badly, finishing it still teaches you something. A delivery the client refuses costs the same wood.</p>
+      <div class="dialog-actions"><button class="btn-wood" data-act="job-drop-yes" data-pid="${escapeHtml(pid)}">Drop it, lose the wood</button><button class="btn-brass" data-act="job-drop-no">Keep working on it</button></div>`);
   }
 
   function openTownBoard() {
@@ -1060,7 +1074,7 @@ ACM.Game = (function () {
           ${doneCount > 0 ? `<span class="tag">Built ${doneCount}×</span>` : `<span></span>`}
           ${mineFlag
             ? `<span>${isActive ? `<span class="tag" style="background:#bbf7d0;">Working on this</span>` : `<button class="btn-green btn-sm" data-act="job-switch" data-pid="${p.id}">Work on this</button>`}
-               <button class="btn-wood btn-sm" data-act="job-drop" data-pid="${p.id}">Drop</button></span>`
+               <button class="btn-wood btn-sm" data-act="job-drop" data-pid="${p.id}">${buildStarted(progressOf(p.id)) ? "Drop (wood is lost)" : "Drop"}</button></span>`
             : `<button class="btn-brass btn-sm" data-act="job-accept" data-pid="${p.id}">Accept</button>`}
         </div></div>`;
     };
@@ -2138,7 +2152,9 @@ ACM.Game = (function () {
       else if (act === "shop-mill") openLumberMill();
       else if (act === "job-accept") { if (acceptJob(el.dataset.pid)) toast("Commission accepted!", "good"); openTownBoard(); }
       else if (act === "job-switch") { switchActive(el.dataset.pid); updateHUD(); updateObjective(); toast("Now working on that commission. Go to the Layout Bench.", "good"); openTownBoard(); }
-      else if (act === "job-drop") { dropJob(el.dataset.pid); updateObjective(); openTownBoard(); }
+      else if (act === "job-drop") askDropJob(el.dataset.pid);
+      else if (act === "job-drop-yes") { dropJob(el.dataset.pid); updateObjective(); openTownBoard(); }
+      else if (act === "job-drop-no") openTownBoard();
       else if (["log-sell", "log-mill", "log-mill-paid", "board-sell"].includes(act)) rackAction(el);
       else if (["npc", "chat", "gift", "meal", "job-accept-npc"].includes(act)) npcAction(el);
     });
