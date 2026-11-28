@@ -494,10 +494,25 @@ ACM.Game = (function () {
   // =====================================================================
   //  CLOCK, ENERGY, SLEEP
   // =====================================================================
+  // Events the teacher dashboard and progress report are built from. These are kept much longer than routine
+  // activity (walking into buildings, chatting, felling, eating...), so a semester of play doesn't push early
+  // quiz results and mistake trends out of the record.
+  const LEARNING_EVENTS = new Set(["deliver", "build", "refused", "quiz", "exam", "safety", "measure", "design", "draft", "drop", "hazard", "fasten", "test"]);
+  const KEEP_LEARNING = 3000, KEEP_ROUTINE = 600;
   function logEvent(type, data) {
     if (!state.events) state.events = [];
-    state.events.push(Object.assign({ t: type, d: state.dayCount, m: Math.round(state.timeMin || 0) }, data || {}));
-    if (state.events.length > 600) state.events.splice(0, state.events.length - 600);
+    const ev = state.events;
+    ev.push(Object.assign({ t: type, d: state.dayCount, m: Math.round(state.timeMin || 0) }, data || {}));
+    if (ev.length <= KEEP_ROUTINE) return;
+    let learning = 0;
+    for (let i = 0; i < ev.length; i++) if (LEARNING_EVENTS.has(ev[i].t)) learning++;
+    let dropRoutine = Math.max(0, ev.length - learning - KEEP_ROUTINE), dropLearning = Math.max(0, learning - KEEP_LEARNING);
+    if (!dropRoutine && !dropLearning) return;
+    state.events = ev.filter((e) => {      // drop the oldest of whichever kind is over its limit
+      if (LEARNING_EVENTS.has(e.t)) { if (dropLearning > 0) { dropLearning--; return false; } }
+      else if (dropRoutine > 0) { dropRoutine--; return false; }
+      return true;
+    });
   }
 
   // ----- friendship perks -----

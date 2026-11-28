@@ -300,7 +300,7 @@
         <div class="row"><span>Village repairs</span><span>${s.repairs.length}/${s.repairTotal}</span></div>
         <div class="row"><span>Workshop bays added</span><span>${s.bays}/2</span></div>
         <div class="row"><span>Game days played</span><span>${s.days}</span></div>
-        <div class="row"><span>Logged events (latest 600 kept)</span><span>${s.eventCount}</span></div>
+        <div class="row"><span>Logged events (learning: latest 3000 kept · routine: latest 600)</span><span>${s.eventCount}</span></div>
         <div style="margin-top:8px">${s.flags.map((f) => `<span class="pill flag">${esc(f)}</span>`).join("") || '<span class="good">No flags</span>'}</div></div>`;
   }
 
