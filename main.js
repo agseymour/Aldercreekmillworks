@@ -803,8 +803,8 @@ ACM.Game = (function () {
             <p class="item-meta">You hid in the workshop until dark, bruised and out of breath. The day is over. Felling lots of trees in a single day makes it more likely that you'll disturb something living in them.</p>
             <div class="dialog-actions"><button class="btn-wood" data-act="close">OK</button></div>`
         });
-        const safe = () => { logEvent("squirrel_escape", {}); toast("You ducked inside and the squirrel gave up. Phew!", "good"); };
-        if (ACM.World.startChase && tx != null) { toast("RUN for cover (any building)! You have a 5 second head start.", "bad"); ACM.World.startChase(tx, ty, caught, safe); }
+        const safe = () => { logEvent("squirrel_escape", {}); toast("You made it to cover and the squirrel gave up. Phew!", "good"); };
+        if (ACM.World.startChase && tx != null) { toast("RUN for cover: your workshop or any building's door! You have a 5 second head start.", "bad"); ACM.World.startChase(tx, ty, caught, safe); }
         else caught();
       };
     }, 700);
@@ -2031,6 +2031,27 @@ ACM.Game = (function () {
     return required.filter(([key]) => !ACM[key]).map(([, file]) => file);
   }
 
+  // ---- autosave: progress survives a closed tab, a dead battery or a crashed browser ----
+  // On this device every 30 s and whenever the tab is hidden or closed (instant, works offline);
+  // to the cloud every 3 minutes and when the tab is hidden, but only if something changed.
+  let autosaveOn = false, lastCloudSig = "";
+  const saveSig = () => [state.dayCount, Math.floor(state.timeMin), Math.round(state.cash), state.stars, (state.events || []).length, state.energy].join("|");
+  function cloudAutosave() {
+    const sig = saveSig();
+    if (sig === lastCloudSig) return;
+    lastCloudSig = sig;
+    ACM.CloudSync.saveToCloud(state).catch(() => {});
+  }
+  function startAutosave() {
+    if (autosaveOn) return;
+    autosaveOn = true;
+    lastCloudSig = saveSig();
+    setInterval(() => ACM.CloudSync.saveLocal(state), 30000);
+    setInterval(cloudAutosave, 180000);
+    document.addEventListener("visibilitychange", () => { if (document.hidden) { ACM.CloudSync.saveLocal(state); cloudAutosave(); } });
+    window.addEventListener("pagehide", () => ACM.CloudSync.saveLocal(state));
+  }
+
   function initCharacterCreator() {
     const statusEl = document.getElementById("login-status");
     const startBtn = document.getElementById("btn-start-new");
@@ -2086,6 +2107,7 @@ ACM.Game = (function () {
           if (result && result.state) {
             migrateLoadedState(result.state);
             toast(`Welcome back to ${state.shopName}!`, "good");
+            if (result.newerLocal) ACM.CloudSync.saveToCloud(state);   // this device had progress the cloud never got: send it up
           } else {
             if (pinHash) { Mem.forgetPin(classCode, shopName); renderRecents(); fail("Please type your PIN to sign in again.", "input-pin"); return; }
             if (!/^\d{4}$/.test(pin)) { fail("New workshop: choose a PIN of exactly 4 numbers, and remember it.", "input-pin"); return; }
@@ -2111,6 +2133,7 @@ ACM.Game = (function () {
         });
       }
       $in("input-pin").value = "";
+      startAutosave();
       document.getElementById("creator-modal").classList.add("hidden");
       updateHUD();
       renderPlantBar();

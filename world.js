@@ -711,11 +711,23 @@ ACM.World = (function () {
   function startChase(tx, ty, onCaught, onSafe) {
     chaser = { x: tx * T + 16, y: ty * T + 16, dir: 1, frame: 0, age: 0, wait: 300, onCaught, onSafe };   // 5 s head start (300 steps)
   }
+  // Cover from the squirrel: inside any building, inside the workshop walls, or right at a building's front door
+  // (so a shop that's closed for the night still counts). The burned-out family house is no shelter, and the
+  // homestead only counts once something has been built on the plot.
+  function inShelter() {
+    if (scene) return true;
+    const tx = Math.floor(player.x / T), ty = Math.floor(player.y / T);
+    const ws = M.workshop;
+    if (tx > ws.x && tx < ws.x + ws.w - 1 && ty >= ws.y + 2 && ty <= ws.y + ws.h - 2) return true;   // inside the walls (unbuilt bays are blocked anyway)
+    const doors = M.buildings.filter((b) => b.doorX != null && b.kind !== "legacy");
+    if (M.home && curState && (curState.homeStage || 0) >= 1) doors.push(M.home);
+    return doors.some((b) => Math.abs(tx - b.doorX) <= 1 && ty >= b.y + b.h - 1 && ty <= b.y + b.h);
+  }
   function updateChaser() {
     const c = chaser;
     if (!c) return;
     c.age++;
-    if (scene) { chaser = null; if (c.onSafe) c.onSafe(); return; }        // inside a building you're safe
+    if (inShelter()) { chaser = null; if (c.onSafe) c.onSafe(); return; }  // made it to cover: the squirrel gives up
     if (c.wait > 0) { c.wait--; c.frame += 0.08; return; }                  // it shakes itself and glares for a few seconds first
     c.frame += 0.24;
     const dx = player.x - c.x, dy = player.y - c.y, d = Math.hypot(dx, dy) || 1;
@@ -1182,6 +1194,7 @@ ACM.World = (function () {
     spawnBurst,
     startChase,
     isChasing: () => !!chaser,
+    inShelter,
     clearChase: () => { chaser = null; },
     getNpcs: () => npcs,
     enterBuilding,

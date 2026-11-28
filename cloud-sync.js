@@ -91,7 +91,9 @@ function headers(extra = {}) {
     }
   }
 
-  function saveLocal(state) {
+  // every save is stamped, so at sign-in the newer of the cloud and on-device copies wins
+  function saveLocal(state, stamp) {
+    state.savedAt = stamp || Date.now();
     try {
       const key = `${LOCAL_PREFIX}${state.classCode}_${state.shopName}`.toLowerCase();
       localStorage.setItem(key, JSON.stringify(sanitized(state)));
@@ -129,7 +131,7 @@ function headers(extra = {}) {
   const lockedMsg = (d) => `Too many wrong PINs. Try again in ${Math.max(1, Math.ceil((d.retry_after || 600) / 60))} minute(s).`;
 
   async function saveToCloud(state) {
-    saveLocal(state);
+    saveLocal(state);   // stamps state.savedAt; the cloud copy below carries the same stamp
     if (!isConfigured()) {
       return { ok: true, mode: "local" };
     }
@@ -226,12 +228,16 @@ function headers(extra = {}) {
     const wrongPin = { error: "Incorrect 4-digit PIN for that existing Workshop Name." };
     let reachable = !isConfigured(); // local-only mode has nothing to be "unreachable"
 
+    const localOk = !!local && (pinHash ? (!local.pin || local.pin === pinHash) : pinMatches(local.pin, cleanPin, cleanCode, cleanName));
     const accept = (parsed) => {
-      parsed.pin = cleanPin;
-      if (pinHash) parsed._pinHash = pinHash;
-      saveLocal(parsed);
+      // The tab may have closed before the last cloud save finished: if this device has a newer copy, resume that.
+      const newerLocal = localOk && (Number(local.savedAt) || 0) > (Number(parsed.savedAt) || 0);
+      const pick = newerLocal ? local : parsed;
+      pick.pin = cleanPin;
+      if (pinHash) pick._pinHash = pinHash;
+      saveLocal(pick, pick.savedAt);
       confirmedRemote.add(`${cleanCode}|${cleanName}`);
-      return { state: parsed };
+      return { state: pick, newerLocal };
     };
 
     if (isConfigured()) {
@@ -412,6 +418,7 @@ function headers(extra = {}) {
   }
 
   return {
+    saveLocal,
     hashPin,
     pinHashOf,
     teacherLogin,
