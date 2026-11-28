@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Alder Creek Millworks — Production Tech 11 & 12</title>
-  <link rel="stylesheet" href="style.css?v=38" />
+  <link rel="stylesheet" href="style.css?v=39" />
 </head>
 <body>
   <div id="app-shell">
@@ -95,6 +95,7 @@
           </div>
 
           <div class="creator-form-col">
+            <div id="recent-logins" class="recent-logins hidden" aria-label="Recent workshops on this device"></div>
             <div class="form-row">
               <label for="input-class-code">Class Code (from your teacher)</label>
               <input type="text" id="input-class-code" placeholder="e.g., PRODTECH11A" maxlength="20" />
@@ -105,7 +106,8 @@
             </div>
             <div class="form-row">
               <label for="input-pin">4-Digit Save PIN (protects your save)</label>
-              <input type="password" id="input-pin" placeholder="1234" maxlength="4" />
+              <input type="password" id="input-pin" placeholder="1234" maxlength="4" inputmode="numeric" autocomplete="off" />
+              <label class="keep-signed-in"><input type="checkbox" id="input-remember" /> Keep me signed in on this device <span class="keep-note">(not on shared computers)</span></label>
             </div>
 
             <p class="hint-text" style="margin:2px 0 8px"><a href="teacher.html" style="color:inherit;opacity:.8">Teacher? Open the class dashboard</a></p>
@@ -161,40 +163,41 @@
   </div>
 
   <!-- Modular Scripts in Dependency Order -->
-  <script src="data-workshop.js?v=38"></script>
-  <script src="data-tools.js?v=38"></script>
-  <script src="data-lumber.js?v=38"></script>
-  <script src="data-projects.js?v=38"></script>
-  <script src="data-questions.js?v=38"></script>
-  <script src="data-safety.js?v=38"></script>
-  <script src="data-repairs.js?v=38"></script>
-  <script src="data-story.js?v=38"></script>
-  <script src="art-sprites.js?v=38"></script>
-  <script src="art-diagrams.js?v=38"></script>
-  <script src="minigames.js?v=38"></script>
-  <script src="drafting.js?v=38"></script>
-  <script src="art-safety.js?v=38"></script>
-  <script src="safety.js?v=38"></script>
-  <script src="measure.js?v=38"></script>
-  <script src="story.js?v=38"></script>
-  <script src="data-npcs.js?v=38"></script>
-  <script src="data-foods.js?v=38"></script>
-  <script src="data-interiors.js?v=38"></script>
-  <script src="data-measure.js?v=38"></script>
-  <script src="audio.js?v=38"></script>
-  <script src="world-map.js?v=38"></script>
-  <script src="art-buildings.js?v=38"></script>
-  <script src="art-icons.js?v=38"></script>
-  <script src="art-critters.js?v=38"></script>
-  <script src="art-world.js?v=38"></script>
-  <script src="art-interiors.js?v=38"></script>
-  <script src="world.js?v=38"></script>
-  <script src="cloud-sync.js?v=38"></script>
-  <script src="ui-reveal.js?v=38"></script>
-  <script src="dock.js?v=38"></script>
-  <script src="guide.js?v=38"></script>
-  <script src="cheat.js?v=38"></script>
-  <script src="calculator.js?v=38"></script>
-  <script src="main.js?v=38"></script>
+  <script src="data-workshop.js?v=39"></script>
+  <script src="data-tools.js?v=39"></script>
+  <script src="data-lumber.js?v=39"></script>
+  <script src="data-projects.js?v=39"></script>
+  <script src="data-questions.js?v=39"></script>
+  <script src="data-safety.js?v=39"></script>
+  <script src="data-repairs.js?v=39"></script>
+  <script src="data-story.js?v=39"></script>
+  <script src="art-sprites.js?v=39"></script>
+  <script src="art-diagrams.js?v=39"></script>
+  <script src="minigames.js?v=39"></script>
+  <script src="drafting.js?v=39"></script>
+  <script src="art-safety.js?v=39"></script>
+  <script src="safety.js?v=39"></script>
+  <script src="measure.js?v=39"></script>
+  <script src="story.js?v=39"></script>
+  <script src="data-npcs.js?v=39"></script>
+  <script src="data-foods.js?v=39"></script>
+  <script src="data-interiors.js?v=39"></script>
+  <script src="data-measure.js?v=39"></script>
+  <script src="audio.js?v=39"></script>
+  <script src="world-map.js?v=39"></script>
+  <script src="art-buildings.js?v=39"></script>
+  <script src="art-icons.js?v=39"></script>
+  <script src="art-critters.js?v=39"></script>
+  <script src="art-world.js?v=39"></script>
+  <script src="art-interiors.js?v=39"></script>
+  <script src="world.js?v=39"></script>
+  <script src="cloud-sync.js?v=39"></script>
+  <script src="login-memory.js?v=39"></script>
+  <script src="ui-reveal.js?v=39"></script>
+  <script src="dock.js?v=39"></script>
+  <script src="guide.js?v=39"></script>
+  <script src="cheat.js?v=39"></script>
+  <script src="calculator.js?v=39"></script>
+  <script src="main.js?v=39"></script>
 </body>
 </html>

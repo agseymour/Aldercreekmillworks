@@ -3,9 +3,9 @@
 ## Setting up a class
 1. Pick a class code (e.g. `PRODTECH11A`) and tell students to type it on the start screen.
 2. Open `teacher.html` (also linked from the student start screen, "Teacher? Open the class dashboard").
-3. Enter the class code and a teacher PIN (4+ characters). The first PIN used for a class code becomes that class's teacher PIN.
+3. Enter the class code and a teacher PIN (4+ characters). The first time you open a new class code you'll also be asked for the school setup code (see `SUPABASE_SETUP.md`), and the PIN you typed becomes that class's teacher PIN.
 
-Students don't need accounts: each uses a workshop name plus a 4-digit PIN to protect their save.
+Students don't need accounts: each uses a workshop name plus a 4-digit PIN to protect their save. After the first visit, the start screen lists recent workshops on that browser, so students tap their name and type only their PIN. On their own device they can tick **Keep me signed in** to skip the PIN too. On shared lab computers, remind them to use **Sign out** in the pause menu (Esc).
 
 ## Reading the dashboard
 - **Worth a conversation**: flags raised automatically: low quiz accuracy, machines used without permits, rising mistakes, no finished work, stuck on a permit test, failing certification exams, several finished projects not yet handed over, often abandoning builds part-way (dropping a commission after cutting starts loses the wood, so it can't be used to wipe mistakes).
@@ -15,6 +15,6 @@ Students don't need accounts: each uses a workshop name plus a 4-digit PIN to pr
 - **Exports**: class summary CSV and a raw events CSV (every logged action, by game day).
 
 ## Things to know
-- Until the cloud key is set up (see `SUPABASE_SETUP.md`), the dashboard only sees saves made on the same device.
+- Run `supabase-secure.sql` once (see `SUPABASE_SETUP.md`) to lock down saves. Until the cloud is set up, the dashboard only sees saves made on the same device.
 - Safety questions marked unconfirmed in `SAFETY_ANSWER_KEY.md` are not graded until you confirm them.
 - Flags are prompts for a conversation, not grades.

@@ -55,8 +55,14 @@ ACM.CloudSync = (function () {
   // copy of the save that is safe to store: PIN replaced by its hash
   function sanitized(state) {
     const c = Object.assign({}, state);
-    c.pin = state.pin ? hashPin(state.pin, state.classCode, state.shopName) : "";
+    c.pin = pinHashOf(state);
+    delete c._pinHash;
     return c;
+  }
+  // a session resumed with "keep me signed in" only knows the PIN's hash, never the PIN itself
+  function pinHashOf(state) {
+    if (state._pinHash) return state._pinHash;
+    return state.pin ? hashPin(state.pin, state.classCode, state.shopName) : "";
   }
 
   function isConfigured() {
@@ -102,6 +108,26 @@ function headers(extra = {}) {
     }
   }
 
+  // ---- Server calls ----
+  // Once supabase-secure.sql has been run, the tables are locked and everything goes through these
+  // functions, which check PINs on the server. Until then the functions don't exist (HTTP 404) and we
+  // fall back to the old direct table access so the game keeps working.
+  let useRpc = true;
+  async function rpc(name, args, timeoutMs) {
+    const res = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/rpc/${name}`, { method: "POST", headers: headers(), body: JSON.stringify(args) }, timeoutMs);
+    if (res.status === 404) {
+      const t = await res.text().catch(() => "");
+      if (/PGRST202|Could not find the function/i.test(t)) {
+        useRpc = false;
+        console.warn("[CloudSync] Secure save functions not installed yet. Run supabase-secure.sql in Supabase to lock down saves.");
+        return { missing: true };
+      }
+    }
+    if (!res.ok) return { httpError: res.status };
+    return { data: await res.json() };
+  }
+  const lockedMsg = (d) => `Too many wrong PINs. Try again in ${Math.max(1, Math.ceil((d.retry_after || 600) / 60))} minute(s).`;
+
   async function saveToCloud(state) {
     saveLocal(state);
     if (!isConfigured()) {
@@ -111,7 +137,35 @@ function headers(extra = {}) {
     const classCode = String(state.classCode || "PRODTECH11").toUpperCase().trim();
     const shopName = String(state.shopName || "Alder Creek Shop").trim();
     const pin = String(state.pin || "0000").trim();
+    const key = `${classCode}|${shopName}`;
 
+    if (useRpc) {
+      try {
+        const r = await rpc("acm_save", {
+          p_class: classCode, p_shop: shopName, p_pin: state._pinHash ? "" : pin, p_pin_hash: state._pinHash || hashPin(pin, classCode, shopName),
+          p_stars: Number(state.stars.toFixed(2)), p_cash: Math.round(state.cash), p_act: Number(state.currentAct) || 1,
+          p_title: state.legacyTitle || "Apprentice Woodworker", p_save: JSON.stringify(sanitized(state)),
+          p_create_only: !confirmedRemote.has(key)
+        }, 8000);
+        if (!r.missing) {
+          if (r.httpError) return { ok: false, mode: "local", error: `Cloud sync returned HTTP ${r.httpError}` };
+          const st = r.data && r.data.status;
+          if (st === "ok") { confirmedRemote.add(key); return { ok: true, mode: "cloud" }; }
+          if (st === "wrong_pin") return { ok: false, error: "That Workshop Name is already taken with a different 4-digit PIN." };
+          if (st === "exists") return { ok: false, mode: "local", error: "A cloud save already exists for this workshop. Reload the page and sign in again to resume it instead of overwriting it." };
+          if (st === "locked") return { ok: false, mode: "local", error: lockedMsg(r.data) };
+          if (st === "too_large") return { ok: false, mode: "local", error: "Save is too large for the cloud" };
+          return { ok: false, mode: "local", error: "Cloud refused the save (" + st + ")" };
+        }
+      } catch (err) {
+        return { ok: true, mode: "local", warning: err.message };
+      }
+    }
+    return legacySave(state, classCode, shopName, pin);
+  }
+
+  // Old direct-table path (only used until supabase-secure.sql is run).
+  async function legacySave(state, classCode, shopName, pin) {
     try {
       const checkUrl = `${SUPABASE_URL}/rest/v1/acm_saves?class_code=eq.${encodeURIComponent(classCode)}&shop_name=eq.${encodeURIComponent(shopName)}&select=pin`;
       const checkRes = await fetchWithTimeout(checkUrl, { headers: headers() });
@@ -121,7 +175,7 @@ function headers(extra = {}) {
       }
       const existingRows = await checkRes.json();
       if (existingRows.length > 0) {
-        if (!pinMatches(existingRows[0].pin, pin, classCode, shopName)) {
+        if (state._pinHash ? existingRows[0].pin !== state._pinHash : !pinMatches(existingRows[0].pin, pin, classCode, shopName)) {
           return { ok: false, error: "That Workshop Name is already taken with a different 4-digit PIN." };
         }
         if (!confirmedRemote.has(`${classCode}|${shopName}`)) {
@@ -136,7 +190,7 @@ function headers(extra = {}) {
       const row = {
         class_code: classCode,
         shop_name: shopName,
-        pin: hashPin(pin, classCode, shopName),
+        pin: state._pinHash || hashPin(pin, classCode, shopName),
         stars: Number(state.stars.toFixed(2)),
         cash: Math.round(state.cash),
         act: Number(state.currentAct) || 1,
@@ -162,28 +216,51 @@ function headers(extra = {}) {
     }
   }
 
-  async function loadFromCloud(classCode, shopName, pin) {
+  // pinHash: optional stored hash from "keep me signed in", used instead of the typed PIN.
+  async function loadFromCloud(classCode, shopName, pin, pinHash) {
     const cleanCode = String(classCode || "").toUpperCase().trim();
     const cleanName = String(shopName || "").trim();
     const cleanPin = String(pin || "").trim();
+    const hash = pinHash || hashPin(cleanPin, cleanCode, cleanName);
     const local = loadLocal(cleanCode, cleanName);
     const wrongPin = { error: "Incorrect 4-digit PIN for that existing Workshop Name." };
     let reachable = !isConfigured(); // local-only mode has nothing to be "unreachable"
 
+    const accept = (parsed) => {
+      parsed.pin = cleanPin;
+      if (pinHash) parsed._pinHash = pinHash;
+      saveLocal(parsed);
+      confirmedRemote.add(`${cleanCode}|${cleanName}`);
+      return { state: parsed };
+    };
+
     if (isConfigured()) {
       try {
-        const url = `${SUPABASE_URL}/rest/v1/acm_saves?class_code=eq.${encodeURIComponent(cleanCode)}&shop_name=eq.${encodeURIComponent(cleanName)}&select=pin,save_json`;
-        const res = await fetchWithTimeout(url, { headers: headers() });
-        if (res.ok) {
-          reachable = true;
-          const rows = await res.json();
-          if (rows.length > 0) {
-            if (!pinMatches(rows[0].pin, cleanPin, cleanCode, cleanName)) return wrongPin;
-            const parsed = JSON.parse(rows[0].save_json);
-            parsed.pin = cleanPin;
-            saveLocal(parsed);
-            confirmedRemote.add(`${cleanCode}|${cleanName}`);
-            return { state: parsed };
+        let handled = false;
+        if (useRpc) {
+          const r = await rpc("acm_load", { p_class: cleanCode, p_shop: cleanName, p_pin: pinHash ? "" : cleanPin, p_pin_hash: hash });
+          if (!r.missing) {
+            handled = true;
+            if (r.data) {
+              reachable = true;
+              const st = r.data.status;
+              if (st === "wrong_pin") return wrongPin;
+              if (st === "locked") return { error: lockedMsg(r.data) };
+              if (st === "ok") return accept(JSON.parse(r.data.save_json));
+            }
+          }
+        }
+        if (!handled) {
+          const url = `${SUPABASE_URL}/rest/v1/acm_saves?class_code=eq.${encodeURIComponent(cleanCode)}&shop_name=eq.${encodeURIComponent(cleanName)}&select=pin,save_json`;
+          const res = await fetchWithTimeout(url, { headers: headers() });
+          if (res.ok) {
+            reachable = true;
+            const rows = await res.json();
+            if (rows.length > 0) {
+              const stored = rows[0].pin;
+              if (pinHash ? stored !== pinHash : !pinMatches(stored, cleanPin, cleanCode, cleanName)) return wrongPin;
+              return accept(JSON.parse(rows[0].save_json));
+            }
           }
         }
       } catch (err) {
@@ -194,7 +271,8 @@ function headers(extra = {}) {
     if (local) {
       // A save exists on this device: only hand it over with the right PIN.
       // (Previously a wrong PIN returned "no save", which started a blank game that overwrote the real local save.)
-      if (pinMatches(local.pin, cleanPin, cleanCode, cleanName)) { local.pin = cleanPin; return { state: local }; }
+      const ok = pinHash ? (!local.pin || local.pin === pinHash) : pinMatches(local.pin, cleanPin, cleanCode, cleanName);
+      if (ok) { local.pin = cleanPin; if (pinHash) local._pinHash = pinHash; return { state: local }; }
       return wrongPin;
     }
     return { state: null, unreachable: !reachable };
@@ -225,19 +303,23 @@ function headers(extra = {}) {
       return rows.sort((a, b) => b.stars - a.stars || b.cash - a.cash);
     }
 
+    const toRow = (r) => ({
+      shopName: r.shop_name,
+      stars: Number(r.stars) || 1.0,
+      cash: Number(r.cash) || 0,
+      act: Number(r.act) || 1,
+      legacyTitle: r.legacy_title || "Woodworker"
+    });
     try {
+      if (useRpc) {
+        const r = await rpc("acm_leaderboard", { p_class: cleanCode });
+        if (!r.missing) return Array.isArray(r.data) ? r.data.map(toRow) : [];
+      }
       const filter = cleanCode ? `class_code=eq.${encodeURIComponent(cleanCode)}&` : "";
       const url = `${SUPABASE_URL}/rest/v1/acm_saves?${filter}select=shop_name,stars,cash,act,legacy_title&order=stars.desc,cash.desc`;
       const res = await fetchWithTimeout(url, { headers: headers() });
       if (!res.ok) return [];
-      const data = await res.json();
-      return data.map((r) => ({
-        shopName: r.shop_name,
-        stars: Number(r.stars) || 1.0,
-        cash: Number(r.cash) || 0,
-        act: Number(r.act) || 1,
-        legacyTitle: r.legacy_title || "Woodworker"
-      }));
+      return (await res.json()).map(toRow);
     } catch (err) {
       return [];
     }
@@ -246,6 +328,7 @@ function headers(extra = {}) {
 
   // ---- Teacher access: class records. Teacher PIN is stored hashed in table acm_classes (class_code, teacher_hash). ----
   const teacherHash = (code, pin) => HASH_TAG + sha256(`acm-teacher|${String(code).toUpperCase().trim()}|${String(pin).trim()}`);
+  let teacherSession = null;   // {code, hash} after a successful login; needed to read class saves
 
   function localSaves(classCode) {
     const out = [];
@@ -258,8 +341,9 @@ function headers(extra = {}) {
     return out;
   }
 
-  // returns {ok, mode, created?, error?}. First use of a class code claims it with the PIN given.
-  async function teacherLogin(classCode, pin) {
+  // returns {ok, mode, created?, needSetupCode?, error?}. A new class code is claimed with the PIN given
+  // (and, once supabase-secure.sql is installed, the school setup code).
+  async function teacherLogin(classCode, pin, setupCode) {
     const code = String(classCode || "").toUpperCase().trim();
     if (!code || String(pin || "").trim().length < 4) return { ok: false, error: "Enter the class code and a teacher PIN (4+ characters)." };
     const h = teacherHash(code, pin);
@@ -271,36 +355,65 @@ function headers(extra = {}) {
       return { ok: true, mode: "local", created: true };
     }
     try {
+      if (useRpc) {
+        const r = await rpc("acm_teacher_login", { p_class: code, p_teacher_hash: h, p_setup_code: String(setupCode || "").trim() || null });
+        if (!r.missing) {
+          if (r.httpError) return { ok: false, error: `Couldn't reach the class records (HTTP ${r.httpError}).` };
+          const st = r.data && r.data.status;
+          if (st === "ok" || st === "created") { teacherSession = { code, hash: h }; return { ok: true, mode: "cloud", created: st === "created" }; }
+          if (st === "wrong") return { ok: false, error: "Wrong teacher PIN for this class." };
+          if (st === "locked") return { ok: false, error: lockedMsg(r.data) };
+          if (st === "setup_required") return { ok: false, needSetupCode: true, error: "This class code is new. Enter your school setup code to create it." };
+          return { ok: false, error: "Couldn't sign in (" + st + ")." };
+        }
+      }
       const url = `${SUPABASE_URL}/rest/v1/acm_classes?class_code=eq.${encodeURIComponent(code)}&select=teacher_hash`;
       const res = await fetchWithTimeout(url, { headers: headers() });
       if (!res.ok) return { ok: false, error: `Couldn't reach the class table (HTTP ${res.status}).` };
       const rows = await res.json();
-      if (rows.length) return rows[0].teacher_hash === h ? { ok: true, mode: "cloud" } : { ok: false, error: "Wrong teacher PIN for this class." };
+      if (rows.length) {
+        if (rows[0].teacher_hash !== h) return { ok: false, error: "Wrong teacher PIN for this class." };
+        teacherSession = { code, hash: h };
+        return { ok: true, mode: "cloud" };
+      }
       const ins = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/acm_classes`, { method: "POST", headers: headers({ Prefer: "return=minimal" }), body: JSON.stringify({ class_code: code, teacher_hash: h }) });
-      return ins.ok ? { ok: true, mode: "cloud", created: true } : { ok: false, error: `Couldn't create the class (HTTP ${ins.status}).` };
+      if (!ins.ok) return { ok: false, error: `Couldn't create the class (HTTP ${ins.status}).` };
+      teacherSession = { code, hash: h };
+      return { ok: true, mode: "cloud", created: true };
     } catch (err) {
       return { ok: false, error: "Network problem: " + err.message };
     }
   }
 
-  // full student saves (PIN never selected) for a class
+  // full student saves (PIN never selected) for a class; needs a teacherLogin first when the cloud is set up
   async function fetchClassSaves(classCode) {
     const code = String(classCode || "").toUpperCase().trim();
     const local = localSaves(code);
     if (!isConfigured()) return { saves: local, mode: "local" };
+    const parse = (r) => { try { const s = JSON.parse(r.save_json); s._updated = r.updated_at; delete s.pin; return s; } catch (e) { return null; } };
     try {
+      if (useRpc) {
+        if (!teacherSession || teacherSession.code !== code) return { saves: local, mode: "local", warning: "Sign in again to load the class" };
+        const r = await rpc("acm_class_saves", { p_class: code, p_teacher_hash: teacherSession.hash }, 15000);
+        if (!r.missing) {
+          if (r.httpError) return { saves: local, mode: "local", warning: `Cloud returned HTTP ${r.httpError}` };
+          if (!r.data || r.data.status !== "ok") return { saves: local, mode: "local", warning: r.data && r.data.status === "locked" ? lockedMsg(r.data) : "Teacher sign-in no longer valid" };
+          return { saves: (r.data.saves || []).map(parse).filter(Boolean), mode: "cloud" };
+        }
+      }
       const url = `${SUPABASE_URL}/rest/v1/acm_saves?class_code=eq.${encodeURIComponent(code)}&select=shop_name,updated_at,save_json&order=shop_name.asc`;
       const res = await fetchWithTimeout(url, { headers: headers() }, 12000);
       if (!res.ok) return { saves: local, mode: "local", warning: `Cloud returned HTTP ${res.status}` };
       const data = await res.json();
-      const saves = data.map((r) => { try { const s = JSON.parse(r.save_json); s._updated = r.updated_at; delete s.pin; return s; } catch (e) { return null; } }).filter(Boolean);
-      return { saves, mode: "cloud" };
+      return { saves: data.map(parse).filter(Boolean), mode: "cloud" };
     } catch (err) {
       return { saves: local, mode: "local", warning: err.message };
     }
   }
 
   return {
+    hashPin,
+    pinHashOf,
     teacherLogin,
     fetchClassSaves,
     saveToCloud,

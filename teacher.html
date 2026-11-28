@@ -58,9 +58,10 @@
 <main>
   <section id="login" class="card login">
     <h2 style="margin-top:0">Teacher sign-in</h2>
-    <p class="note">Enter your class code and a teacher PIN. The first time a class code is used here, the PIN you type becomes that class's teacher PIN (stored as a hash, never in plain text). Students can't see this page's data without it.</p>
+    <p class="note">Enter your class code and a teacher PIN. The first time a class code is used here, the PIN you type becomes that class's teacher PIN (stored as a hash, never in plain text), and you'll be asked for the school setup code. Students can't see this page's data without it.</p>
     <label for="code">Class code</label><input id="code" maxlength="20" autocomplete="off" placeholder="e.g. PRODTECH11A">
     <label for="pin">Teacher PIN (4+ characters)</label><input id="pin" type="password" maxlength="24" autocomplete="off">
+    <div id="setup-row" class="hidden"><label for="setup">School setup code (only needed to create a new class)</label><input id="setup" type="password" maxlength="60" autocomplete="off"></div>
     <div style="margin-top:14px"><button id="go">Open class</button></div>
     <div class="err" id="err"></div>
     <p class="note" id="mode"></p>
@@ -78,10 +79,10 @@
   </section>
 </main>
 
-<script src="data-safety.js"></script>
-<script src="data-questions.js"></script>
-<script src="data-repairs.js"></script>
-<script src="cloud-sync.js"></script>
+<script src="data-safety.js?v=39"></script>
+<script src="data-questions.js?v=39"></script>
+<script src="data-repairs.js?v=39"></script>
+<script src="cloud-sync.js?v=39"></script>
 <script>
 (function () {
   const $ = (id) => document.getElementById(id);
@@ -328,9 +329,13 @@
 
   async function login() {
     $("err").textContent = ""; $("go").disabled = true;
-    const r = await ACM.CloudSync.teacherLogin($("code").value, $("pin").value);
+    const r = await ACM.CloudSync.teacherLogin($("code").value, $("pin").value, $("setup").value);
     $("go").disabled = false;
-    if (!r.ok) { $("err").textContent = r.error; return; }
+    if (!r.ok) {
+      $("err").textContent = r.error;
+      if (r.needSetupCode) { $("setup-row").classList.remove("hidden"); $("setup").focus(); }
+      return;
+    }
     CLASS = $("code").value.toUpperCase().trim();
     $("login").classList.add("hidden"); $("dash").classList.remove("hidden");
     ["btn-refresh", "btn-csv", "btn-ev", "btn-out"].forEach((i) => $(i).classList.remove("hidden"));
@@ -339,7 +344,7 @@
   }
 
   $("go").onclick = login;
-  $("pin").onkeydown = (e) => { if (e.key === "Enter") login(); };
+  $("pin").onkeydown = $("setup").onkeydown = (e) => { if (e.key === "Enter") login(); };
   $("btn-refresh").onclick = load;
   $("btn-csv").onclick = csv;
   $("btn-ev").onclick = eventsCsv;
