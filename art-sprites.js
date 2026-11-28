@@ -322,6 +322,7 @@ ACM.ArtSprites = (function () {
   }
 
   return {
-    drawCharacter
+    drawCharacter,
+    sprite: (appearance, frame, facing, gear) => getCharacterSprite(appearance || {}, frame || 0, facing || "down", gear || {})
   };
 })();

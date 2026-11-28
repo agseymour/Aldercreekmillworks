@@ -910,6 +910,7 @@ ACM.World = (function () {
   }
 
   /* ----------------------------------------------------------- render */
+  let atm = null;   // this frame's outdoor light and colour (ACM.Atmos), null indoors or when the module is missing
   const statics = [];
   (function buildStatics() {
     M.natureTrees.forEach((t) => statics.push({ k: "ntree", by: t.ty * T + 30, x0: t.tx * T - 16, x1: t.tx * T + 48, y0: t.ty * T - 62, y1: t.ty * T + 34, t }));
@@ -925,23 +926,47 @@ ACM.World = (function () {
     return AW.getTree(type, season, variant, Math.max(0, Math.min(2, t.stage || 0)));
   }
 
+  /* the sprite canvas an entity is drawn from, and where (world px); used for shadows, reflections, edge light */
+  function spriteOf(e, state, season) {
+    switch (e.k) {
+      case "ntree": { const t = e.t; return { cv: AW.getTree(t.type, season, t.variant, 2), x: t.tx * T - 16, y: t.ty * T - 62, base: t.ty * T + 28 }; }
+      case "wtree": { const t = e.t; return { cv: AW.getTree(t.type, season, Math.floor(M.hash(t.tx, t.ty, 6) * 3), Math.max(0, Math.min(2, t.stage || 0))), x: t.tx * T - 16, y: t.ty * T - 62, base: t.ty * T + 28 }; }
+      case "ptree": { const t = e.t; return { cv: plantedSprite(t, season), x: t.tx * T - 16, y: t.ty * T - 62, base: t.ty * T + 28 }; }
+      case "bld": { const sp = AB.getSprite(e.b, season, e.b.kind === "legacy" ? ((state.story && state.story.stage) || 0) : 0); return { cv: sp.cv, x: e.b.x * T - sp.ox, y: e.b.y * T - sp.oy, base: (e.b.y + e.b.h) * T - 2 }; }
+      case "home": { const sp = AB.getSprite(M.home, season, state.homeStage || 0); return { cv: sp.cv, x: M.home.x * T - sp.ox, y: M.home.y * T - sp.oy, base: (M.home.y + M.home.h) * T - 2 }; }
+      case "npc": case "player": {
+        if (!ACM.ArtSprites.sprite) return null;
+        const n = e.n, isP = e.k === "player";
+        const sp = isP ? ACM.ArtSprites.sprite(state.appearance, player.frame, player.facing, {})
+          : ACM.ArtSprites.sprite(n.def.appearance, n.walking ? Math.floor(tick / 8) % 4 : 0, n.face, n.def.gear || {});
+        const px = isP ? player.x : n.px, py = isP ? player.y - 19 : n.py - 18;
+        return { cv: sp.cv, x: px - sp.ox * 1.3, y: py - sp.oy * 1.3, w: sp.cv.width * 1.3, h: sp.cv.height * 1.3, base: py + 14 * 1.3 };
+      }
+    }
+    return null;
+  }
+  const edgeLight = (ctx, cv, x, y) => { if (atm && ACM.Atmos) ACM.Atmos.rim(ctx, cv, x, y, atm); };
+
   function drawEntity(ctx, e, state, season) {
     switch (e.k) {
       case "ntree": {
         const t = e.t;
-        ctx.drawImage(AW.getTree(t.type, season, t.variant, 2), t.tx * T - 16, t.ty * T + 30 - 92);
+        const cv = AW.getTree(t.type, season, t.variant, 2);
+        ctx.drawImage(cv, t.tx * T - 16, t.ty * T + 30 - 92); edgeLight(ctx, cv, t.tx * T - 16, t.ty * T + 30 - 92);
         break;
       }
       case "wtree": {
         const t = e.t;
         const variant = Math.floor(M.hash(t.tx, t.ty, 6) * 3);
-        ctx.drawImage(AW.getTree(t.type, season, variant, Math.max(0, Math.min(2, t.stage || 0))), t.tx * T - 16, t.ty * T + 30 - 92);
+        const cv = AW.getTree(t.type, season, variant, Math.max(0, Math.min(2, t.stage || 0)));
+        ctx.drawImage(cv, t.tx * T - 16, t.ty * T + 30 - 92); edgeLight(ctx, cv, t.tx * T - 16, t.ty * T + 30 - 92);
         break;
       }
       case "stump": AW.drawScenery(ctx, { kind: "stump", tx: e.tx, ty: e.ty, v: 0 }, season); break;
       case "ptree": {
         const t = e.t;
-        ctx.drawImage(plantedSprite(t, season), t.tx * T - 16, t.ty * T + 30 - 92);
+        const cv = plantedSprite(t, season);
+        ctx.drawImage(cv, t.tx * T - 16, t.ty * T + 30 - 92); edgeLight(ctx, cv, t.tx * T - 16, t.ty * T + 30 - 92);
         if ((t.stage || 0) >= 2) AW.drawReadyMark(ctx, t.tx, t.ty, tick);
         break;
       }
@@ -949,13 +974,13 @@ ACM.World = (function () {
       case "prop": AW.drawProp(ctx, e.p, season, tick); break;
       case "bld": {
         const sp = AB.getSprite(e.b, season, e.b.kind === "legacy" ? ((state.story && state.story.stage) || 0) : 0);
-        ctx.drawImage(sp.cv, e.b.x * T - sp.ox, e.b.y * T - sp.oy);
+        ctx.drawImage(sp.cv, e.b.x * T - sp.ox, e.b.y * T - sp.oy); edgeLight(ctx, sp.cv, e.b.x * T - sp.ox, e.b.y * T - sp.oy);
         break;
       }
       case "home": {
         const stage = state.homeStage || 0;
         const sp = AB.getSprite(M.home, season, stage);
-        ctx.drawImage(sp.cv, M.home.x * T - sp.ox, M.home.y * T - sp.oy);
+        ctx.drawImage(sp.cv, M.home.x * T - sp.ox, M.home.y * T - sp.oy); edgeLight(ctx, sp.cv, M.home.x * T - sp.ox, M.home.y * T - sp.oy);
         break;
       }
       case "furn": AB.drawFurniture(ctx, e.f); break;
@@ -1036,8 +1061,10 @@ ACM.World = (function () {
   }
 
   function render(ctx, state) {
-    if (scene) { renderScene(ctx, state); return; }
+    if (scene) { atm = null; renderScene(ctx, state); return; }
     const season = state.season || "Spring";
+    const AT = ACM.Atmos;
+    atm = AT ? AT.at(state) : null;
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, VIEW_W, VIEW_H);
     ctx.save();
@@ -1047,6 +1074,7 @@ ACM.World = (function () {
     ctx.drawImage(AW.getGround(season), camera.x, camera.y, VW, VH, camera.x, camera.y, VW, VH);
     { const wk = AW.getWorkshop(season, ACM.Workshop ? ACM.Workshop.zones(curState) : { west: true, east: true }); ctx.drawImage(wk.cv, wk.x, wk.y); }
     AW.drawWaterShimmer(ctx, camera.x, camera.y, tick, VW, VH);
+    if (atm) AT.water(ctx, camera, VW, VH, atm, tick);
 
     // walk destination marker
     if (player.dest) {
@@ -1108,6 +1136,12 @@ ACM.World = (function () {
     { const sg = state.story, hr = (state.timeMin / 60) % 24; if (sg && sg.met && sg.stage < 5 && (hr >= 17.5 || hr < 6)) list.push({ k: "ghost", by: 1e6, x: 76.5 * T, y: 47.5 * T }); }
     list.push({ k: "player", by: player.y });
     list.sort((a, b) => a.by - b.by);
+    if (atm) {
+      const items = [];
+      for (let i = 0; i < list.length; i++) { const it = spriteOf(list[i], state, season); if (it) items.push(it); }
+      AT.castShadows(ctx, items, camera, VW, VH, atm);
+      AT.reflections(ctx, items, camera, VW, VH, atm);
+    }
     for (let i = 0; i < list.length; i++) drawEntity(ctx, list[i], state, season);
 
     // chimney smoke
@@ -1130,12 +1164,14 @@ ACM.World = (function () {
       ctx.fillStyle = "#e8b84a"; ctx.fillRect(bx, by, Math.round(28 * f), 5);
     });
     bursts.forEach((b) => { ctx.fillStyle = b.col; ctx.fillRect(Math.round(b.x), Math.round(b.y), b.s, b.s); });
+    if (atm) AT.sky(ctx, camera, VW, VH, atm, tick);
     if (activeStation) AW.drawStationMarker(ctx, activeStation, tick);
     ctx.restore();
+    if (atm) AT.grade(ctx, VIEW_W, VIEW_H, atm, tick);
 
     // day / night lighting (screen space)
     const sky = AW.skyAt(state.timeMin, state.weather);
-    if (sky.a > 0.015) {
+    if (sky.a > 0.015 || (atm && atm.glow > 0.03)) {
       const lights = [];
       const panes = [];
       const inView = (x, y, r) => x > vx0 - r && x < vx1 + r && y > vy0 - r && y < vy1 + r;
@@ -1157,10 +1193,14 @@ ACM.World = (function () {
         lights.push({ x: r.x + r.w / 2, y: r.y + r.h + 10, r: 70, k: 0.9, warm: true });
       });
       lights.push({ x: player.x, y: player.y - 12, r: 95, k: 0.55, warm: true });
-      ctx.save(); ctx.scale(WZ, WZ);
-      AW.drawLighting(ctx, state, camera.x, camera.y, VW, VH, lights, panes);
-      ctx.restore();
+      if (atm) { ctx.save(); ctx.scale(WZ, WZ); ctx.translate(-camera.x, -camera.y); AT.glow(ctx, panes, camera, atm); ctx.restore(); }
+      if (sky.a > 0.015) {
+        ctx.save(); ctx.scale(WZ, WZ);
+        AW.drawLighting(ctx, state, camera.x, camera.y, VW, VH, lights, panes);
+        ctx.restore();
+      }
     }
+    if (atm) AT.motes(ctx, VIEW_W, VIEW_H, { x: camera.x * WZ, y: camera.y * WZ }, atm, tick);
 
     AW.drawOverlay(ctx, state, particles, birds, player, M.stations, VIEW_W, VIEW_H, plantLabel, { x: camera.x * WZ, y: camera.y * WZ, wz: WZ }, chaser, resolveGoal());
     if (fade > 0) { ctx.fillStyle = "rgba(0,0,0," + fade + ")"; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
