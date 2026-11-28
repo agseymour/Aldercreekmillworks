@@ -352,100 +352,204 @@ ACM.ArtWorld = (function () {
     return set || null;
   }
 
-  function trunkColor(type) {
-    return type === "birch" ? ["#e8e4da", "#bdb8aa"] : type === "walnut" ? ["#4a3020", "#6b4630"] : ["#5a3b22", "#7a5232"];
+  /* ---------------- per-pixel tree painter ----------------
+     Trees are painted into a 64x96 buffer (anchor at 32,92) with lit-sphere leaf clumps or drooping
+     conifer tiers, 5-tone hue-shifted ramps, ordered dithering between tones and a selective outline. */
+  const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+  const hx = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const mixc = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  function ramp5(dark, mid, light) {
+    const D = hx(dark), Mi = hx(mid), L = hx(light);
+    return [mixc(D, [18, 28, 58], 0.5), D, Mi, L, mixc(L, [255, 246, 176], 0.42)];
   }
-
-  function drawConifer(c, type, season, variant) {
-    const cedar = type === "cedar";
-    const base = cedar ? ["#2c5a49", "#1f4538", "#437a63"] : [["#2f7a4c", "#215c38", "#4ea56a"], ["#2a7046", "#1d5233", "#46996a"], ["#36824f", "#256340", "#58b074"]][variant % 3];
-    const tiers = cedar ? 5 : 4;
-    const hwMax = cedar ? 17 : 24;
-    const tierH = cedar ? 19 : 22;
-    R(c, "rgba(0,0,0,0.22)", -15, -4, 30, 6);
-    R(c, "#5a3b22", -3, -16, 6, 16);
-    R(c, "#7a5232", -3, -16, 2, 16);
-    R(c, "#3e2815", 2, -16, 1, 16); R(c, "#3e2815", -1, -12, 1, 3); R(c, "#3e2815", 0, -6, 1, 3);
-    R(c, "#5a3b22", -6, -3, 12, 3); R(c, "#7a5232", -6, -3, 3, 1);          // root flare
-    for (let i = 0; i < tiers; i++) {
-      const bottom = -12 - i * (cedar ? 15 : 16);
-      const hw = hwMax - i * (cedar ? 3 : 5);
-      for (let r = 0; r < tierH; r += 2) {
-        const half = Math.round((hw * (r + 2)) / tierH);
-        const y = bottom - tierH + r;
-        const wob = Math.floor(hash(i * 13 + r, variant, 200) * 3) - 1;
-        R(c, base[0], -half + wob, y, half * 2, 2);
-        R(c, base[1], -half + wob, y, Math.max(2, Math.round(half * 0.55)), 2);
-        R(c, base[2], Math.round(half * 0.35), y, Math.max(2, Math.round(half * 0.5)) + wob, 2);
-      }
-      R(c, base[1], -hw, bottom - 2, hw * 2, 3);
-      // serrated hem, needle flecks, sunlit tips on the left, tiny cones
-      for (let k = -hw; k < hw; k += 4) { R(c, base[1], k + ((i + variant) % 2) * 2, bottom + 1, 3, 2); }
-      for (let k = 0; k < 9 + tiers; k++) { const fx = -hw + 3 + Math.floor(hash(k, i * 7 + variant, 240) * (hw * 2 - 6)), fy = bottom - tierH + 6 + Math.floor(hash(k, i * 7 + variant, 241) * (tierH - 8)); R(c, hash(k, i, 242) < 0.5 ? base[1] : base[2], fx, fy, 2, 1); }
-      for (let r = 4; r < tierH - 4; r += 5) R(c, base[2], -Math.round(hw * (r + 2) / tierH) + 2, bottom - tierH + r, 3, 1);
-      if (i < 2 && hash(i, variant, 243) < 0.7) { R(c, "#6a4528", Math.round(hw * 0.4), bottom - 5, 2, 3); R(c, "#8a5e36", Math.round(hw * 0.4), bottom - 5, 1, 1); }
-      if (season === "Winter") {
-        for (let r = 0; r < 9; r += 2) {
-          const half = Math.round((hw * (r + 2)) / tierH);
-          R(c, "#f2f8fc", -half + 1, bottom - tierH + r, half * 2 - 2, 2);
+  function TreeBuf(s) {
+    const w = 64, h = 96, tone = new Int8Array(w * h).fill(-1), pal = new Uint8Array(w * h), col = [];
+    const idx = (x, y) => (y + 92) * w + (x + 32);
+    const inb = (x, y) => x >= -32 && x < 32 && y >= -92 && y < 4;
+    return {
+      s, tone, pal, col,
+      addRamp(r) { col.push(r); return col.length - 1; },
+      get(x, y) { return inb(x, y) ? tone[idx(x, y)] : -1; },
+      set(x, y, t, p) { if (!inb(x, y)) return; const i = idx(x, y); tone[i] = Math.max(0, Math.min(4, t)); pal[i] = p; },
+      dim(x, y, k) { if (!inb(x, y)) return; const i = idx(x, y); if (tone[i] >= 0) tone[i] = Math.max(0, tone[i] - k); },
+      q(l, x, y) { const b = (BAYER[((y + 96) & 3) * 4 + ((x + 64) & 3)] / 16 - 0.47) * 0.55; return Math.max(0, Math.min(4, Math.floor(l * 4.6 + b))); },
+      outline(excludeTop) {
+        // bottom/right silhouette pixels drop to the darkest tone; top-left edge keeps its light
+        const t2 = tone.slice();
+        for (let y = -92; y < 4; y++) for (let x = -32; x < 32; x++) {
+          const i = idx(x, y); if (t2[i] < 0) continue;
+          const e = (xx, yy) => !inb(xx, yy) || t2[idx(xx, yy)] < 0;
+          if (e(x, y + 1) || e(x + 1, y)) tone[i] = 0;
+          else if ((e(x - 1, y) || e(x, y - 1)) && !excludeTop) tone[i] = Math.min(4, t2[i] + 1);
         }
-        R(c, "#dbe8f1", -hw, bottom - 3, 8, 2);
-        R(c, "#dbe8f1", hw - 8, bottom - 3, 8, 2);
+      },
+      blit(c) {
+        const cv = mk(w, h), x = cv.getContext("2d"), img = x.createImageData(w, h);
+        for (let i = 0; i < w * h; i++) {
+          if (tone[i] < 0) continue;
+          const cc = col[pal[i]][tone[i]];
+          img.data[i * 4] = cc[0]; img.data[i * 4 + 1] = cc[1]; img.data[i * 4 + 2] = cc[2]; img.data[i * 4 + 3] = 255;
+        }
+        x.putImageData(img, 0, 0);
+        c.drawImage(cv, -32, -92);
       }
+    };
+  }
+  const LX = -0.55, LY = -0.72, LZ = 0.42;   // light from the upper left, slightly in front
+
+  function paintTrunk(B, type, s, top) {
+    const birch = type === "birch";
+    const P = B.addRamp(birch ? ramp5("#9c978a", "#d8d3c6", "#f4f1e8") : type === "walnut" ? ramp5("#2e1c12", "#4a3020", "#6b4630") : ramp5("#3a2414", "#5a3b22", "#7f5634"));
+    const hw = Math.max(2, Math.round(4 * s)), y0 = Math.round(top * s);
+    for (let y = y0; y <= 0; y++) {
+      const flare = y > -4 * s ? Math.round((4 * s + y) * 1.2) : 0;
+      for (let x = -hw - flare; x < hw + flare; x++) {
+        const nx = (x + 0.5) / (hw + flare);
+        let l = 0.62 - nx * 0.42;
+        if (!birch && hash(x + 40, Math.floor(y / 3), 77) < 0.28) l -= 0.25;          // bark grooves
+        if (!birch && hash(x, y, 78) < 0.08) l += 0.15;
+        B.set(x, y, B.q(l, x, y), P);
+      }
+      if (birch && hash(0, y, 79) < 0.22 && y < -2) { const bx = -hw + Math.floor(hash(1, y, 80) * hw); B.set(bx, y, 0, P); B.set(bx + 1, y, 0, P); B.set(bx + 2, y, 1, P); }
     }
-    const topY = -12 - (tiers - 1) * (cedar ? 15 : 16) - tierH;
-    R(c, base[1], -1, topY - 4, 3, 6);
+    // roots
+    [[-1, 1], [1, 1]].forEach(([d]) => { for (let k = 0; k < Math.round(4 * s); k++) B.set(d * (hw + 2 + k), -1 + Math.floor(k / 2), k < 2 ? 1 : 2, P); });
+    return P;
   }
 
-  function drawLeafy(c, type, season, variant) {
-    const [tc, tl] = trunkColor(type);
-    R(c, "rgba(0,0,0,0.22)", -18, -4, 36, 7);
-    R(c, tc, -4, -26, 8, 26);
-    R(c, tl, -4, -26, 3, 26);
-    R(c, tc, -7, -4, 14, 4);
-    R(c, tl, -7, -4, 4, 1); R(c, "rgba(0,0,0,0.25)", 2, -26, 2, 26);       // root flare + shaded side
-    for (let k = 0; k < 6; k++) R(c, "rgba(0,0,0,0.28)", -3 + (k % 2) * 4, -24 + k * 4, 1, 3);   // bark grooves
-    if (type !== "birch") { R(c, tc, -9, -3, 3, 3); R(c, tc, 6, -3, 3, 3); }
-    if (type === "birch") for (let i = 0; i < 5; i++) R(c, "#2a2a2a", -4 + (i % 2) * 3, -22 + i * 5, 3, 1);
+  function paintBranches(B, s, P, spread) {
+    const line = (x0, y0, x1, y1, th) => {
+      const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+      for (let i = 0; i <= n; i++) { const t = i / n, x = Math.round(x0 + (x1 - x0) * t), y = Math.round(y0 + (y1 - y0) * t); for (let k = 0; k < th; k++) B.set(x + k, y, k === 0 ? 3 : 1, P); }
+    };
+    line(0, Math.round(-26 * s), Math.round(-16 * spread * s), Math.round(-50 * s), 2);
+    line(0, Math.round(-26 * s), Math.round(15 * spread * s), Math.round(-48 * s), 2);
+    line(0, Math.round(-30 * s), Math.round(2 * s), Math.round(-66 * s), 2);
+  }
+
+  const SHAPES = {
+    oak: { rx: 30, ry: 23, cy: -52, n: 13, cr: 0.42, top: -30 },
+    maple: { rx: 27, ry: 25, cy: -54, n: 12, cr: 0.44, top: -30 },
+    walnut: { rx: 30, ry: 20, cy: -50, n: 12, cr: 0.4, top: -30 },
+    birch: { rx: 19, ry: 29, cy: -56, n: 11, cr: 0.42, top: -34 },
+    cherry: { rx: 30, ry: 21, cy: -50, n: 13, cr: 0.42, top: -28 }
+  };
+
+  function drawLeafyRich(c, type, season, variant, s) {
+    const B = TreeBuf(s), sh = SHAPES[type] || SHAPES.oak, seed = variant * 31 + type.length * 7;
+    const tP = paintTrunk(B, type, s, sh.top + 4);
     const cols = season === "Winter" ? null : leafColors(type, season, variant);
     if (!cols) {
-      // bare branches
-      const br = type === "birch" ? "#d9d5c8" : tc;
-      beam(c, br, 0, -26, -16, -52, 4);
-      beam(c, br, 0, -26, 17, -50, 4);
-      beam(c, br, 0, -30, 2, -70, 4);
-      beam(c, br, -10, -44, -26, -58, 3);
-      beam(c, br, 11, -44, 26, -62, 3);
-      beam(c, br, 2, -56, -9, -76, 3);
-      beam(c, br, 2, -58, 13, -78, 3);
-      const snow = "#f1f7fb";
-      R(c, snow, -18, -54, 6, 3);
-      R(c, snow, 14, -52, 6, 3);
-      R(c, snow, -1, -72, 6, 3);
-      R(c, snow, -28, -60, 5, 2);
-      R(c, snow, 24, -64, 5, 2);
+      const snowP = B.addRamp(ramp5("#9fb4c8", "#dfeaf3", "#ffffff"));
+      const grow = (x, y, ang, len, th, depth) => {
+        const x1 = x + Math.cos(ang) * len, y1 = y + Math.sin(ang) * len, n = Math.max(1, Math.round(len));
+        for (let i = 0; i <= n; i++) {
+          const t = i / n, px = Math.round(x + (x1 - x) * t), py = Math.round(y + (y1 - y) * t), w = Math.max(1, Math.round(th * (1 - t * 0.4)));
+          for (let k = 0; k < w; k++) B.set(px + k, py, k === 0 ? 3 : k === w - 1 ? 1 : 2, tP);
+          if (B.get(px, py - 1) < 0 && Math.cos(ang) !== 0 && Math.abs(Math.sin(ang)) < 0.85 && hash(px, py, 86) < 0.7) B.set(px, py - 1, 3, snowP);
+        }
+        if (depth <= 0) return;
+        const sp = 0.42 + hash(Math.round(x1), Math.round(y1), 87) * 0.25;
+        grow(x1, y1, ang - sp, len * 0.68, th * 0.62, depth - 1);
+        grow(x1, y1, ang + sp, len * 0.66, th * 0.62, depth - 1);
+      };
+      const ty = Math.round((SHAPES[type] || SHAPES.oak).top * s) + 4;
+      grow(0, ty, -Math.PI / 2 - 0.5, 14 * s, 3 * s, 3);
+      grow(1, ty, -Math.PI / 2 + 0.5, 14 * s, 3 * s, 3);
+      grow(0, ty - 2, -Math.PI / 2 + (hash(variant, 1, 88) - 0.5) * 0.3, 18 * s, 3 * s, 3);
+      B.outline(true); B.blit(c);
       return;
     }
-    const [mid, dark, light] = cols;
-    const ox = (variant - 1) * 2;
-    blob(c, dark, 0 + ox, -50, 28, 24, 2);
-    blob(c, mid, -2 + ox, -54, 26, 22, 2);
-    blob(c, mid, -14 + ox, -44, 14, 14, 2);
-    blob(c, mid, 14 + ox, -46, 14, 14, 2);
-    blob(c, light, -6 + ox, -62, 14, 10, 2);
-    blob(c, light, 10 + ox, -58, 8, 6, 2);
-    for (let i = 0; i < 16; i++) {
-      const a = hash(i, variant, 210) * Math.PI * 2;
-      const rx = 24 + hash(i, variant, 211) * 6, ry = 20 + hash(i, variant, 212) * 6;
-      R(c, i % 3 === 0 ? light : dark, Math.round(Math.cos(a) * rx / 2) * 2 + ox, -50 + Math.round(Math.sin(a) * ry / 2) * 2, 4, 4);
+    paintBranches(B, s, tP, 1);
+    const P = B.addRamp(ramp5(cols[1], cols[0], cols[2]));
+    const ox = (variant - 1) * 2 * s, cx0 = ox, cy0 = sh.cy * s, RX = sh.rx * s, RY = sh.ry * s;
+    // clumps: one core, then a ring placed around the canopy ellipse, back (high) to front (low)
+    const clumps = [{ x: cx0, y: cy0, r: Math.min(RX, RY) * 0.82 }];
+    for (let i = 0; i < sh.n; i++) {
+      const a = (i / sh.n) * Math.PI * 2 + hash(i, seed, 90) * 0.6, d = 0.45 + hash(i, seed, 91) * 0.35;
+      clumps.push({ x: cx0 + Math.cos(a) * RX * d * 0.92, y: cy0 + Math.sin(a) * RY * d * 0.86, r: Math.min(RX, RY) * (sh.cr + hash(i, seed, 92) * 0.18) });
     }
-    for (let i = 0; i < 10; i++) R(c, dark, -16 + Math.floor(hash(i, variant, 220) * 34) + ox, -34 + Math.floor(hash(i, variant, 221) * 10), 4, 2);
-    // inner shadow under the canopy, sunlit dapples top-left, serrated leaf edge, branch glimpses
-    R(c, "rgba(0,0,0,0.22)", -18 + ox, -36, 36, 4);
-    for (let i = 0; i < 14; i++) R(c, light, -20 + Math.floor(hash(i, variant, 250) * 20) + ox, -72 + Math.floor(hash(i, variant, 251) * 22), 3, 2);
-    for (let i = 0; i < 12; i++) { const a2 = Math.PI * (0.1 + hash(i, variant, 252) * 0.8); R(c, mid, Math.round(Math.cos(a2) * 29) + ox - 1, -50 + Math.round(Math.sin(a2) * 22), 3, 3); }
-    R(c, tc, -2, -38, 2, 6); R(c, tc, -8, -42, 2, 5); R(c, tc, 6, -41, 2, 5);
-    if (type === "cherry" && season === "Spring") for (let i = 0; i < 12; i++) R(c, "#ffffff", -22 + Math.floor(hash(i, 1, 230) * 46) + ox, -70 + Math.floor(hash(i, 2, 231) * 38), 2, 2);
+    clumps.sort((a, b) => a.y - b.y);
+    clumps.forEach((k, ci) => {
+      // occlusion: shade what's already painted just outside this clump's lower-right rim
+      for (let y = Math.floor(k.y - k.r - 3); y <= k.y + k.r + 3; y++) for (let x = Math.floor(k.x - k.r - 3); x <= k.x + k.r + 3; x++) {
+        const d = Math.hypot(x - k.x, y - k.y);
+        if (d > k.r && y > k.y - k.r * 0.35) { if (d < k.r + 1.3) B.dim(x, y, 2); else if (d < k.r + 2.6) B.dim(x, y, 1); }
+      }
+      for (let y = Math.floor(k.y - k.r - 1); y <= k.y + k.r + 1; y++) for (let x = Math.floor(k.x - k.r - 1); x <= k.x + k.r + 1; x++) {
+        const ang = Math.atan2(y - k.y, x - k.x), rr = k.r * (1 + 0.13 * Math.sin(ang * 5 + ci * 1.7) + 0.06 * Math.sin(ang * 11 + ci));
+        const dx = (x + 0.5 - k.x) / rr, dy = (y + 0.5 - k.y) / rr, d2 = dx * dx + dy * dy;
+        if (d2 > 1) continue;
+        const nz = Math.sqrt(1 - d2);
+        // blend the clump's own roundness with the whole canopy's form
+        const gx = (x - cx0) / RX, gy = (y - cy0) / RY, gz = Math.sqrt(Math.max(0, 1 - Math.min(1, gx * gx + gy * gy)));
+        let nx = dx * 0.75 + gx * 0.25, ny = dy * 0.75 + gy * 0.25, nzz = nz * 0.75 + gz * 0.25;
+        const nl = Math.hypot(nx, ny, nzz) || 1; nx /= nl; ny /= nl; nzz /= nl;
+        let l = (nx * LX + ny * LY + nzz * LZ) * 0.7 + 0.2;
+        // leaf texture: sparse 2px leaf glints and pockets rather than noise
+        const lh = hash((x + (y >> 1 & 1)) >> 1, y >> 1, seed + 93);
+        if (lh > 0.84) l += 0.2; else if (lh < 0.12) l -= 0.2;
+        if (y > cy0 + RY * 0.4) l -= ((y - (cy0 + RY * 0.4)) / (RY * 0.6)) * 0.16;          // underside in shade
+        B.set(x, y, B.q(l, x, y), P);
+      }
+    });
+    // stray leaves on the rim
+    for (let i = 0; i < 26; i++) {
+      const a = hash(i, seed, 95) * Math.PI * 2, x = Math.round(cx0 + Math.cos(a) * (RX + 1)), y = Math.round(cy0 + Math.sin(a) * (RY + 1));
+      if (B.get(x, y) < 0 && (B.get(x - 1, y) >= 0 || B.get(x + 1, y) >= 0 || B.get(x, y - 1) >= 0 || B.get(x, y + 1) >= 0)) B.set(x, y, Math.sin(a) < 0 ? 3 : 1, P);
+    }
+    B.outline(false);
+    // blossoms, fruit, autumn speckle
+    if (type === "cherry" && season === "Spring") {
+      const W2 = B.addRamp(ramp5("#d98aa4", "#fbd5e0", "#ffffff"));
+      for (let i = 0; i < 34; i++) { const x = Math.round(cx0 - RX + hash(i, seed, 96) * RX * 2), y = Math.round(cy0 - RY + hash(i, seed, 97) * RY * 1.6); if (B.get(x, y) >= 2) B.set(x, y, 4, W2); }
+    }
+    if (type === "cherry" && season === "Summer") {
+      const F = B.addRamp(ramp5("#5a0e18", "#a8202f", "#f06a6a"));
+      for (let i = 0; i < 9; i++) { const x = Math.round(cx0 - RX * 0.8 + hash(i, seed, 98) * RX * 1.6), y = Math.round(cy0 - RY * 0.2 + hash(i, seed, 99) * RY * 0.9); if (B.get(x, y) >= 0) { B.set(x, y, 2, F); B.set(x, y + 1, 1, F); B.set(x - 1, y, 3, F); } }
+    }
+    B.blit(c);
+  }
+
+  function drawConiferRich(c, type, season, variant, s) {
+    const B = TreeBuf(s), cedar = type === "cedar", seed = variant * 17 + (cedar ? 5 : 0);
+    paintTrunk(B, "pine", s, -16);
+    const base = cedar ? ["#2c5a49", "#1f4538", "#437a63"] : [["#2f7a4c", "#215c38", "#4ea56a"], ["#2a7046", "#1d5233", "#46996a"], ["#36824f", "#256340", "#58b074"]][variant % 3];
+    const P = B.addRamp(ramp5(base[1], base[0], base[2]));
+    const snowP = season === "Winter" ? B.addRamp(ramp5("#8fa6bc", "#d6e4ef", "#ffffff")) : -1;
+    const tiers = cedar ? 5 : 4, hwMax = (cedar ? 17 : 24) * s, tierH = (cedar ? 20 : 23) * s, step = (cedar ? 15 : 16) * s;
+    for (let i = 0; i < tiers; i++) {
+      const bottom = Math.round(-12 * s - i * step), top = Math.round(bottom - tierH), hw = hwMax - i * (cedar ? 3 : 5) * s;
+      // occlusion on the tier below, under this tier's hem
+      for (let x = Math.floor(-hw - 1); x <= hw + 1; x++) for (let k = 1; k <= 2; k++) B.dim(x, bottom + k + (Math.abs(x) % 4 === 1 ? 1 : 0), 1);
+      for (let y = top; y <= bottom + 2; y++) {
+        const t = (y - top) / (bottom - top);
+        const half = hw * Math.pow(Math.max(0, Math.min(1, t)), 0.85) + (hash(i * 31 + y, seed, 100) - 0.5) * 2;
+        for (let x = Math.floor(-half); x <= Math.ceil(half); x++) {
+          // drooping needle tufts along the hem
+          if (y > bottom) { const tuft = ((x + i * 2 + 64) % 4); if (y - bottom > (tuft === 1 ? 2 : tuft === 0 || tuft === 2 ? 1 : 0)) continue; }
+          const nx = x / Math.max(1, half);
+          let l = 0.56 + (-nx) * 0.3 * (nx < 0 ? 1.15 : 1) + (1 - t) * 0.16 - Math.max(0, (t - 0.72) / 0.28) * 0.3;
+          // needle strokes slanting down and outward
+          const sx = x < 0 ? -x : x;
+          if ((sx * 2 + (y - top) * 3 + i) % 7 === 0) l -= 0.18;
+          else if ((sx * 2 + (y - top) * 3 + i) % 7 === 3) l += 0.1;
+          l += (hash(x, y, seed + 101) - 0.5) * 0.06;
+          if (snowP >= 0 && t < (i === tiers - 1 ? 0.4 : 0.58) + (hash(x, i, 102) - 0.5) * 0.16) { B.set(x, y, B.q(0.62 + (-nx) * 0.3 - t * 0.5, x, y), snowP); continue; }
+          B.set(x, y, B.q(l, x, y), P);
+        }
+      }
+      // small cones
+      if (i < 2 && hash(i, variant, 243) < 0.7) {
+        const C = B.addRamp(ramp5("#3a2414", "#6a4528", "#8a5e36")), cx = Math.round(hw * 0.4);
+        B.set(cx, bottom - 4, 3, C); B.set(cx, bottom - 3, 2, C); B.set(cx + 1, bottom - 3, 1, C); B.set(cx, bottom - 2, 1, C);
+      }
+    }
+    // leader at the top
+    const topY = Math.round(-12 * s - (tiers - 1) * step - tierH);
+    for (let y = topY - Math.round(4 * s); y < topY + 2; y++) B.set(0, y, y < topY - 1 ? 3 : 2, P);
+    B.outline(false);
+    B.blit(c);
   }
 
   function drawSprout(c, season) {
@@ -467,9 +571,10 @@ ACM.ArtWorld = (function () {
     if (stage === 0) {
       drawSprout(c, season);
     } else {
-      if (stage === 1) c.scale(0.5, 0.5);
-      if (type === "pine" || type === "cedar") drawConifer(c, type, season, variant);
-      else drawLeafy(c, type, season, variant);
+      const k = stage === 1 ? 0.52 : 1;
+      R(c, "rgba(0,0,0,0.22)", Math.round(-16 * k), Math.round(-3 * k), Math.round(32 * k), Math.max(3, Math.round(6 * k)));
+      if (type === "pine" || type === "cedar") drawConiferRich(c, type, season, variant, k);
+      else drawLeafyRich(c, type, season, variant, k);
     }
     treeCache[key] = cv;
     return cv;
